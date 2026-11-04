@@ -345,6 +345,15 @@ public class KeyboardView extends View {
             onDrawKeyBackground(key, canvas, background);
         }
         onDrawKeyTopVisuals(key, canvas, paint, params);
+        if (key.getCode() == helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode.VOICE_INPUT
+                && ru.klaviatura.voice.VoiceInput.INSTANCE.builtinEnabled()) {
+            final float ts = paint.getTextSize(); final int col = paint.getColor(); final Paint.Align al = paint.getTextAlign();
+            paint.setTextSize(key.getHeight() * 0.22f);
+            paint.setTextAlign(Paint.Align.RIGHT);
+            paint.setColor(ru.klaviatura.voice.VoiceInput.INSTANCE.getListening() ? 0xFFE0A374 : params.mHintLetterColor);
+            canvas.drawText(ru.klaviatura.voice.VoiceInput.INSTANCE.label(), key.getDrawWidth() - key.getHeight() * 0.08f, key.getHeight() * 0.28f, paint);
+            paint.setTextSize(ts); paint.setColor(col); paint.setTextAlign(al);
+        }
 
         canvas.translate(-keyDrawX, -keyDrawY);
     }

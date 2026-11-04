@@ -346,6 +346,7 @@ private val backupFilePatterns by lazy { listOf(
     "UserHistoryDictionary.*${File.separator}UserHistoryDictionary.*\\.(body|header)".toRegex(),
     "custom_background_image.*".toRegex(),
     "custom_font".toRegex(),
+    "kl_learn\\.tsv".toRegex(),
     "custom_emoji_font".toRegex(),
     "clipboard/.*".toRegex(),
 ) }

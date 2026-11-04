@@ -509,7 +509,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
             image = getCustomBackgroundFile(context, night, false); // fall back to portrait image for historic reasons
         if (!image.isFile()) return null;
         try {
-            sCachedBackgroundImages[index] = new BitmapDrawable(context.getResources(), BitmapFactory.decodeFile(image.getAbsolutePath()));
+            sCachedBackgroundImages[index] = new BitmapDrawable(context.getResources(), ru.klaviatura.bg.BgFx.apply(context, BitmapFactory.decodeFile(image.getAbsolutePath()), night));
             return sCachedBackgroundImages[index];
         } catch (Exception e) {
             return null;

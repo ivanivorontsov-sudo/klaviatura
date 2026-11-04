@@ -38,6 +38,12 @@ fun GestureTypingScreen(
     val gestureEnabled = prefs.getBoolean(Settings.PREF_GESTURE_INPUT, Defaults.PREF_GESTURE_INPUT)
     val items = listOf(
         Settings.PREF_GESTURE_INPUT,
+        if (gestureEnabled) ru.klaviatura.glide.GlideEngine.PREF_OWN_GLIDE else null,
+        if (gestureEnabled) "kl_learn_export" else null,
+        if (gestureEnabled) "kl_learn_import" else null,
+        ru.klaviatura.voice.VoiceInput.PREF_ENGINE,
+        ru.klaviatura.voice.VoiceInput.PREF_MIXED,
+        ru.klaviatura.voice.VoiceInput.PREF_COMMANDS,
         if (gestureEnabled)
             Settings.PREF_GESTURE_PREVIEW_TRAIL else null,
         if (gestureEnabled)
@@ -60,6 +66,30 @@ fun GestureTypingScreen(
 }
 
 fun createGestureTypingSettings(context: Context) = listOf(
+    Setting(context, ru.klaviatura.glide.GlideEngine.PREF_OWN_GLIDE, R.string.kl_own_glide, R.string.kl_own_glide_summary) {
+        SwitchPreference(it, true)
+    },
+    Setting(context, "kl_learn_export", R.string.kl_learn_export, R.string.kl_learn_summary) { s ->
+        val ctx = LocalContext.current
+        helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
+            ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.glide.LearnTransferActivity::class.java).putExtra("export", true))
+        })
+    },
+    Setting(context, "kl_learn_import", R.string.kl_learn_import) { s ->
+        val ctx = LocalContext.current
+        helium314.keyboard.settings.preferences.Preference(name = s.title, onClick = {
+            ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.glide.LearnTransferActivity::class.java).putExtra("export", false))
+        })
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_ENGINE, R.string.kl_voice_builtin, R.string.kl_voice_builtin_summary) {
+        SwitchPreference(it, true) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_MIXED, R.string.kl_voice_mixed, R.string.kl_voice_mixed_summary) {
+        SwitchPreference(it, false)
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_COMMANDS, R.string.kl_voice_commands, R.string.kl_voice_commands_summary) {
+        SwitchPreference(it, true)
+    },
     Setting(context, Settings.PREF_GESTURE_INPUT, R.string.gesture_input, R.string.gesture_input_summary) {
         SwitchPreference(it, Defaults.PREF_GESTURE_INPUT)
     },

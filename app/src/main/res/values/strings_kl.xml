@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="kl_own_glide">Свой свайп-декодер (открытый)</string>
+    <string name="kl_own_glide_summary">Большие словари ru/en, подсказки на другой раскладке, обучение. Выключите, чтобы использовать библиотеку Google (если установлена)</string>
+    <string name="kl_learn_export">Экспорт выученных слов</string>
+    <string name="kl_learn_import">Импорт выученных слов</string>
+    <string name="kl_learn_summary">Всё хранится только на телефоне</string>
+    <string name="kl_voice_builtin">Встроенный офлайн-голос (Vosk)</string>
+    <string name="kl_voice_builtin_summary">Язык = текущая раскладка. Выключите, чтобы использовать системный голосовой ввод</string>
+    <string name="kl_voice_mixed">Смешанный голос (ru+en)</string>
+    <string name="kl_voice_mixed_summary">Распознавать оба языка одновременно, фраза за фразой</string>
+    <string name="kl_voice_commands">Голосовая пунктуация</string>
+    <string name="kl_voice_commands_summary">«точка», «запятая», «вопросительный знак», «новая строка»</string>
+    <string name="kl_bg_blur">Размытие фона</string>
+    <string name="kl_bg_dim">Затемнение / осветление фона</string>
+    <string name="kl_ai_bg">ИИ-фон через веб-чат</string>
+    <string name="kl_ai_bg_summary">Qwen, ChatGPT, Gemini, Grok, Алиса… Без API — вход в чат запоминается</string>
+</resources>

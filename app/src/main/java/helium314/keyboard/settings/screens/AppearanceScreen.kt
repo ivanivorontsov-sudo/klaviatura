@@ -70,6 +70,9 @@ fun AppearanceScreen(
         Settings.PREF_NAVBAR_COLOR,
         SettingsWithoutKey.BACKGROUND_IMAGE,
         SettingsWithoutKey.BACKGROUND_IMAGE_LANDSCAPE,
+        "kl_ai_bg",
+        ru.klaviatura.bg.BgFx.PREF_BLUR,
+        ru.klaviatura.bg.BgFx.PREF_DIM,
         R.string.settings_category_miscellaneous,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD,
         if (prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE, Defaults.PREF_ENABLE_SPLIT_KEYBOARD)
@@ -210,6 +213,20 @@ fun createAppearanceSettings(context: Context) = listOf(
         R.string.customize_background_image_landscape, R.string.summary_customize_background_image_landscape)
     {
         BackgroundImagePref(it, true)
+    },
+    Setting(context, "kl_ai_bg", R.string.kl_ai_bg, R.string.kl_ai_bg_summary) { s ->
+        val ctx = LocalContext.current
+        helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
+            ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.bg.AiBackgroundActivity::class.java))
+        })
+    },
+    Setting(context, ru.klaviatura.bg.BgFx.PREF_BLUR, R.string.kl_bg_blur) { setting ->
+        SliderPreference(name = setting.title, key = setting.key, default = 0, range = 0f..25f,
+            description = { "$it" }) { Settings.clearCachedBackgroundImages(); KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
+    Setting(context, ru.klaviatura.bg.BgFx.PREF_DIM, R.string.kl_bg_dim) { setting ->
+        SliderPreference(name = setting.title, key = setting.key, default = ru.klaviatura.bg.BgFx.DEFAULT_DIM, range = 0f..85f,
+            description = { "$it%" }) { Settings.clearCachedBackgroundImages(); KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },
     Setting(context, Settings.PREF_ENABLE_SPLIT_KEYBOARD, R.string.enable_split_keyboard) {
         var show by remember { mutableStateOf(false) }

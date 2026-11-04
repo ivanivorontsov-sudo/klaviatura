@@ -293,6 +293,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         suggestion: String, wasAutoCapitalized: Boolean, ngramContext: NgramContext,
         timeStampInSeconds: Long, blockPotentiallyOffensive: Boolean
     ) {
+        ru.klaviatura.glide.GlideEngine.learn(suggestion, ngramContext)
         // Update the spelling cache before learning. Words that are not yet added to user history
         // and appear in no other language model are not considered valid.
         putWordIntoValidSpellingWordCache("addToUserHistory", suggestion)
@@ -486,6 +487,13 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         composedData: ComposedData, ngramContext: NgramContext, keyboard: Keyboard,
         settingsValuesForSuggestion: SettingsValuesForSuggestion, sessionId: Int, inputStyle: Int
     ): SuggestionResults {
+        if (composedData.mIsBatchMode && ru.klaviatura.glide.GlideEngine.shouldHandle()) {
+            val own = ru.klaviatura.glide.GlideEngine.suggest(keyboard, composedData, ngramContext, dictionaryGroups.map { it.locale })
+            val res = SuggestionResults(SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false)
+            res.addAll(own)
+            res.mRawSuggestions?.addAll(own)
+            return res
+        }
         val proximityInfoHandle = keyboard.proximityInfo.nativeProximityInfo
         val weightOfLangModelVsSpatialModel = floatArrayOf(Dictionary.NOT_A_WEIGHT_OF_LANG_MODEL_VS_SPATIAL_MODEL)
 
@@ -583,6 +591,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
     private fun isBlacklisted(word: String): Boolean = dictionaryGroups.any { it.isBlacklisted(word) }
 
     override fun removeWord(word: String) {
+        ru.klaviatura.glide.GlideEngine.forget(word)
         for (dictionaryGroup in dictionaryGroups) {
             dictionaryGroup.removeWord(word)
         }

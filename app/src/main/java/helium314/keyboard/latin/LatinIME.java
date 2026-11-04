@@ -545,8 +545,39 @@ public class LatinIME extends InputMethodService implements
         Log.i(TAG, "Hardware accelerated drawing: " + mIsHardwareAcceleratedDrawingEnabled);
     }
 
+    private final ru.klaviatura.voice.VoiceTarget mVoiceTarget = new ru.klaviatura.voice.VoiceTarget() {
+        private boolean composing = false;
+        @Override public void showPartial(@NonNull String text) {
+            final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
+            if (ic == null) return;
+            ic.setComposingText(text, 1);
+            composing = true;
+        }
+        @Override public void commitPhrase(@NonNull String text) {
+            final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
+            if (ic == null) return;
+            CharSequence before = ic.getTextBeforeCursor(2, 0);
+            if (composing) { ic.setComposingText("", 1); composing = false; }
+            String t = text;
+            boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
+                    || before.toString().trim().matches(".*[.!?]$");
+            if (sentenceStart && !t.isEmpty() && Character.isLetter(t.charAt(0)))
+                t = Character.toUpperCase(t.charAt(0)) + t.substring(1);
+            if (before != null && before.length() > 0 && !Character.isWhitespace(before.charAt(before.length() - 1))
+                    && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0))) t = " " + t;
+            ic.commitText(t, 1);
+        }
+        @Override public void endVoice() {
+            final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
+            if (ic != null && composing) { ic.finishComposingText(); composing = false; }
+        }
+    };
+
     @Override
     public void onCreate() {
+        ru.klaviatura.voice.VoiceInput.INSTANCE.init(this);
+        ru.klaviatura.glide.GlideEngine.INSTANCE.init(this);
+        ru.klaviatura.voice.VoiceInput.INSTANCE.setOnStateChanged(() -> { final View v = mKeyboardSwitcher.getMainKeyboardView(); if (v != null) v.invalidate(); return kotlin.Unit.INSTANCE; });
         mSettings.startListener();
         KeyboardIconsSet.Companion.getInstance().loadIcons(this);
         mRichImm = RichInputMethodManager.getInstance();
@@ -826,6 +857,7 @@ public class LatinIME extends InputMethodService implements
             // Now that the dummy subtype has a fixed id, we can easily avoid enabling it.
             return;
         }
+        mHandler.post(() -> ru.klaviatura.voice.VoiceInput.INSTANCE.onLayoutChanged());
         InputMethodSubtype oldSubtype = mRichImm.getCurrentSubtype().getRawSubtype();
         if (subtype.equals(oldSubtype)) {
             // onStartInput may be called more than once, resulting in duplicate subtype switches
@@ -1429,6 +1461,10 @@ public class LatinIME extends InputMethodService implements
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
+            if (ru.klaviatura.voice.VoiceInput.INSTANCE.builtinEnabled()) {
+                ru.klaviatura.voice.VoiceInput.INSTANCE.toggle(mVoiceTarget);
+                return;
+            }
             mRichImm.switchToShortcutIme(this);
         }
         final InputTransaction completeInputTransaction =
