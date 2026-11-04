@@ -468,6 +468,16 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         installPreviewPlacerView();
+        // Klaviatura: visible + haptic feedback when a swipe is restarted (hold or loop back)
+        ru.klaviatura.glide.GlideEngine.INSTANCE.setOnRestart(() -> {
+            post(() -> {
+                performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+                mDrawingPreviewPlacerView.animate().cancel();
+                mDrawingPreviewPlacerView.setAlpha(0.15f);
+                mDrawingPreviewPlacerView.animate().alpha(1f).setDuration(220).start();
+            });
+            return kotlin.Unit.INSTANCE;
+        });
     }
 
     @Override

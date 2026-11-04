@@ -492,6 +492,9 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             val res = SuggestionResults(SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false)
             res.addAll(own)
             res.mRawSuggestions?.addAll(own)
+            own.firstOrNull()?.let { top -> try {
+                res.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(top.mWord, dictionaryGroups.map { it.locale.language }, res.map { it.mScore }))
+            } catch (e: Throwable) { } }
             return res
         }
         val proximityInfoHandle = keyboard.proximityInfo.nativeProximityInfo
@@ -524,7 +527,9 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             val have = suggestionResults.map { it.mWord.lowercase() }.toHashSet()
             val extra = ru.klaviatura.glide.GlideEngine.predictions(ngramContext).filter { it.mWord !in have }
             suggestionResults.addAll(extra)
-        }
+        } else try {
+            suggestionResults.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(composedData.mTypedWord, dictionaryGroups.map { it.locale.language }, suggestionResults.map { it.mScore }))
+        } catch (e: Throwable) { }
 
         return suggestionResults
     }

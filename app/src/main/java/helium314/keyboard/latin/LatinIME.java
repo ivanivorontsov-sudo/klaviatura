@@ -866,6 +866,8 @@ public class LatinIME extends InputMethodService implements
     public void onStartInputView(final EditorInfo editorInfo, final boolean restarting) {
         mHandler.onStartInputView(editorInfo, restarting);
         mStatsUtilsManager.onStartInputView();
+        // Klaviatura: Android 10+ lets only the focused IME read the clipboard, so re-check it (and recent screenshots) now
+        try { mClipboardHistoryManager.onStartInputView(); } catch (Throwable e) { Log.w(TAG, "clipboard refresh failed", e); }
     }
 
     @Override

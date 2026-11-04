@@ -35,6 +35,7 @@ object GlideEngine : GlideLearning {
     fun init(context: Context) {
         if (appContext != null) return
         appContext = context.applicationContext
+        ru.klaviatura.emoji.EmojiSuggest.init(context)
         thread(name = "kl-glide-load") {
             for (lang in listOf("ru", "en")) { try { loadLexicon(lang); loadLm(lang) } catch (e: Throwable) { } }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
@@ -46,6 +47,7 @@ object GlideEngine : GlideLearning {
     @Volatile var holdMs = 450
     /** called (on the gesture thread) when a hold restart happens: haptic / trail flash */
     @Volatile var onRestart: (() -> Unit)? = null
+    private var lastLoopStart = 0
     private var lastHoldStart = 0
     val lms = java.util.concurrent.ConcurrentHashMap<String, BigramLM>()
     private fun loadLm(lang: String) {
@@ -104,8 +106,10 @@ object GlideEngine : GlideLearning {
         if (lex.isEmpty()) return emptyList()
         val decoder = GlideDecoder(keys)
         val p = data.mInputPointers
-        val prev = ngram.getNthPrevWord(1)?.toString()?.lowercase()
+        val prevRaw = ngram.getNthPrevWord(1)?.toString()
+        val prev = prevRaw?.lowercase()
         holdMs = appContext?.let { it.prefs().getInt(PREF_HOLD_MS, 450) } ?: 450
+        if (p.pointerSize < 8) lastLoopStart = 0
         var xs = p.xCoordinates; var ys = p.yCoordinates; var n = p.pointerSize
         // (a) hold-to-restart: drop everything before the last long still point
         val hs = GestureRestart.holdStart(xs, ys, p.times, n, decoder.kw, holdMs)
@@ -118,6 +122,7 @@ object GlideEngine : GlideLearning {
         for (st in GestureRestart.returnStarts(xs, ys, n, decoder.kw).asReversed()) {
             val seg = decoder.decode(xs.copyOfRange(st, n), ys.copyOfRange(st, n), n - st, lex, this, prev)
             if (seg.isNotEmpty() && (res.isEmpty() || seg[0].cost < res[0].cost - GestureRestart.SEGMENT_MARGIN)) {
+                if (st != lastLoopStart) { lastLoopStart = st; onRestart?.invoke() }
                 res = seg; xs = xs.copyOfRange(st, n); ys = ys.copyOfRange(st, n); n -= st; break
             }
         }
@@ -129,7 +134,7 @@ object GlideEngine : GlideLearning {
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION
-            SuggestedWordInfo(ProperNouns.case(c.word), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ProperNouns.case(c.word, prevRaw), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 

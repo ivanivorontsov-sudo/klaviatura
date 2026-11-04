@@ -368,6 +368,12 @@ public final class EmojiPalettesView extends LinearLayout
         params.updateParams(mEmojiLayoutParams.getBottomRowKeyboardHeight(), keyVisualAttr);
         new EmojiLayoutParams(getResources()).setEmojiListProperties(mPager); // necessary when floating
         mEmojiCategory.reloadRecents(); // in case recents changed from outside emoji keyboards
+        // Klaviatura: always open on recently used emojis (if there are any)
+        if (!mEmojiCategory.isInRecentTab() && !getRecentsKeyboard().getSortedKeys().isEmpty()) {
+            setCurrentCategory(EmojiCategory.Category.RECENTS, true);
+            updateEmojiCategoryPageIdView();
+        }
+        ru.klaviatura.emoji.GifPanel.attach(this, mPager, mKeyboardActionListener);
         setupSidePadding();
         initDictionaryFacilitator();
     }

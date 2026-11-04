@@ -10,11 +10,13 @@ android {
     compileSdk = 37
 
     defaultConfig {
+        // optional GIF search key (KLIPY), from a CI secret / env; never committed
+        buildConfigField("String", "KLIPY_KEY", "\"" + (System.getenv("KLIPY_KEY") ?: "") + "\"")
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.2.4"
+        versionCode = 9
+        versionName = "1.3.0"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))

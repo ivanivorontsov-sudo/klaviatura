@@ -13,6 +13,8 @@
     <string name="kl_voice_commands_summary">«точка», «запятая», «вопросительный знак», «новая строка»</string>
     <string name="kl_bg_blur">Размытие фона</string>
     <string name="kl_bg_dim">Затемнение / осветление фона</string>
+    <string name="kl_bg_gen">Фон по описанию</string>
+    <string name="kl_bg_gen_summary">Напишите, что нарисовать: Pollinations (бесплатно) или ваш веб-чат в фоне</string>
     <string name="kl_ai_bg">ИИ-фон через веб-чат</string>
     <string name="kl_ai_bg_summary">Qwen, ChatGPT, Gemini, Grok, Алиса… Без API — вход в чат запоминается</string>
     <string name="kl_voice_engine_vosk">Классический движок Vosk для русского</string>
@@ -21,4 +23,10 @@
     <string name="kl_voice_import_summary">Выберите .zip модели Vosk (vosk-model-small-ru / -en), если скачивание не работает</string>
     <string name="kl_swipe_hold_restart">Перезапуск свайпа удержанием</string>
     <string name="kl_swipe_hold_restart_off">Выключено</string>
+    <string name="kl_clip_screenshots">Скриншоты в буфер</string>
+    <string name="kl_clip_screenshots_summary">Свежий скриншот (до 10 минут) сам появляется в истории буфера — вставка одним нажатием</string>
+    <string name="kl_emoji_suggest">Эмодзи в подсказках</string>
+    <string name="kl_emoji_suggest_summary">кот → 🐱, пицца → 🍕</string>
+    <string name="kl_gif_key">Ключ KLIPY для поиска GIF</string>
+    <string name="kl_gif_key_summary">Необязательно: если в сборке нет ключа, вставьте свой (бесплатно на partner.klipy.com)</string>
 </resources>

@@ -16,6 +16,8 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application android:label="@string/english_ime_name"
             android:name="helium314.keyboard.latin.App"
@@ -139,6 +141,12 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
             android:process=":aibg" android:windowSoftInputMode="adjustResize"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:configChanges="orientation|screenSize|keyboardHidden" android:label="ИИ-фон" />
+        <activity android:name="ru.klaviatura.bg.BgGenerateActivity" android:exported="false"
+            android:process=":aibg" android:windowSoftInputMode="adjustResize"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden" android:label="Фон по описанию" />
+        <activity android:name="ru.klaviatura.clip.MediaPermissionActivity" android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
         <activity android:name="ru.klaviatura.glide.LearnTransferActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>

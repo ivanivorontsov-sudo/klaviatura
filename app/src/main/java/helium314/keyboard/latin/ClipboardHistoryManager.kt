@@ -55,6 +55,12 @@ class ClipboardHistoryManager(
             fetchPrimaryClip()
     }
 
+    fun onStartInputView() {
+        if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
+        fetchPrimaryClip()
+        ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc -> clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) }
+    }
+
     fun onDestroy() {
         clipboardManager.removePrimaryClipChangedListener(this)
     }
@@ -72,7 +78,7 @@ class ClipboardHistoryManager(
     //  care about other clip items than first?
     private fun fetchPrimaryClip() {
         if (tempPrimaryClip) return // avoid updating history
-        val clipData = clipboardManager.primaryClip ?: return
+        val clipData = try { clipboardManager.primaryClip } catch (e: Exception) { null } ?: return
         if (clipData.itemCount == 0) return
         val clipItem = clipData.getItemAt(0) ?: return
         val description = clipData.description ?: return

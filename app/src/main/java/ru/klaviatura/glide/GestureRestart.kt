@@ -56,10 +56,35 @@ object GestureRestart {
 /** proper-noun casing (OpenCorpora Name/Surn/Patr/Geox/Orgn/Trad forms with no common-noun reading) */
 object ProperNouns {
     @Volatile var forms: Set<String> = emptySet()
-    fun case(w: String): String {
+
+    /** names that are also common words: capitalised only when the previous word points to a person */
+    private val AMBIGUOUS: Set<String> = listOf(
+        "вера", "веры", "вере", "веру", "верой", "надежда", "надежды", "надежде", "надежду", "надеждой",
+        "любовь", "любови", "любовью", "люба", "любе", "любу", "роман", "романа", "роману", "романом", "романе",
+        "лев", "льва", "льву", "львом", "льве", "роза", "розы", "розе", "розу", "розой", "слава", "славы", "славе", "славу", "славой",
+        "мила", "милы", "миле", "милу", "лиля", "лили", "лиле", "лилю", "майя", "майи", "майе", "майю", "марс", "заря", "зари", "заре", "зарю",
+        "победа", "лада", "лады", "ладе", "ладу", "ника", "ники", "нике", "нику", "сабина", "ангелина", "дина", "дины", "дине", "дину",
+        "глеб", "лён", "ян", "яна", "яне", "яну", "ада", "ады", "аде", "аду", "алла", "аллы", "алле", "аллу", "алиса", "алисы", "алисе", "алису"
+    ).toHashSet()
+    private val CUES: Set<String> = listOf(
+        "привет", "приветик", "здравствуй", "здравствуйте", "дорогая", "дорогой", "дорогую", "милая", "милый", "тётя", "тетя", "дядя",
+        "бабушка", "дедушка", "баба", "деда", "сестра", "брат", "подруга", "подруге", "друг", "другу", "мама", "папа", "зовут", "звали",
+        "позвони", "позвонить", "напиши", "написать", "скажи", "передай", "спроси", "спросить", "попроси",
+        "тёте", "тете", "дяде", "сестре", "брату", "сестры", "брата", "жена", "жене", "муж", "мужу", "дочь", "дочке", "сын", "сыну", "коллега", "коллеге",
+        "пока", "спасибо", "благодарю", "уважаемая", "уважаемый", "товарищ", "имени", "имя"
+    ).toHashSet()
+
+    /** @param prev the previous word (any case) or null; a capitalised unambiguous name right before also counts («Анна Роза») */
+    fun case(w: String, prev: String? = null): String {
         if (w.isEmpty() || w[0].isUpperCase()) return w
         val l = w.lowercase()
         if (l in forms) return w.replaceFirstChar { it.uppercaseChar() }
+        if (l in AMBIGUOUS && prev != null) {
+            val p = prev.lowercase().trim { !it.isLetter() }
+            val nameBefore = prev.firstOrNull()?.isUpperCase() == true && p in forms
+            val cue = p in CUES // prepositions are no cue: «с верой в победу», «к славе»
+            if (cue || nameBefore) return w.replaceFirstChar { it.uppercaseChar() }
+        }
         // hyphenated: «санкт-петербурге», «нью-йорк»
         if ('-' in w) {
             val parts = w.split('-')

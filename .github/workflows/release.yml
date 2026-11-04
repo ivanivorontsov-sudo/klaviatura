@@ -12,7 +12,9 @@ jobs:
       - name: Unit tests (свайп-декодер)
         run: ./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.klaviatura.*'
       - run: ./gradlew --no-daemon assembleRelease
-        env: { KS_FILE: "${{ runner.temp }}/ks.jks", KS_PASS: "${{ secrets.KS_PASS }}", KS_ALIAS: klaviatura }
+        env: { KS_FILE: "${{ runner.temp }}/ks.jks", KS_PASS: "${{ secrets.KS_PASS }}", KS_ALIAS: klaviatura, KLIPY_KEY: "${{ secrets.KLIPY_KEY }}" }
+      - name: Release sanity (R8 kept JNI fields)
+        run: python3 ci/check_jni_fields.py app/build/outputs/apk/release/*.apk libs-dl/sherpa-onnx-*.aar
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with: { files: app/build/outputs/apk/release/*.apk }

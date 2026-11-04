@@ -80,6 +80,10 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
     private Key mCurrentKey;
     private Runnable mPendingKeyDown;
     private Runnable mPendingLongPress;
+    // Klaviatura: emoji swipe — hold the first emoji briefly, then slide across others to type several in one go
+    private boolean mSwipeMode;
+    private long mKeyEnterTime;
+    private static final long SWIPE_DWELL_MS = 70;
     private final Handler mHandler;
 
     // More keys keyboard
@@ -398,6 +402,8 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
         final Key key = getKey(x, y);
         releaseCurrentKey(false /* withKeyRegistering */);
         mCurrentKey = key;
+        mSwipeMode = false;
+        mKeyEnterTime = e.getEventTime();
         if (key == null) {
             return false;
         }
@@ -425,6 +431,8 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
             final int translatedY = mPopupKeysPanel.translateY(y);
             mPopupKeysPanel.onUpEvent(translatedX, translatedY, mPointerId, eventTime);
             dismissPopupKeysPanel();
+        } else if (mSwipeMode) {
+            if (key != null) callListenerOnReleaseKey(key, true);
         } else if (key == currentKey && pendingKeyDown != null) {
             pendingKeyDown.run();
             // Trigger key-release event a little later so that a user can see visual feedback.
@@ -438,6 +446,7 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
     }
 
     public boolean onCancel(final MotionEvent e) {
+        mSwipeMode = false;
         releaseCurrentKey(false);
         dismissPopupKeysPanel();
         cancelLongPress();
@@ -453,6 +462,27 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
         // Touched key has changed, release previous key's callbacks and
         // re-register them for the new key.
         if (key != mCurrentKey && !isShowingPopupKeyboard) {
+            final Key prev = mCurrentKey;
+            final long now = e.getEventTime();
+            // first emoji was already shown as pressed (held >= KEY_PRESS_DELAY_TIME) -> start swipe mode
+            if (!mSwipeMode && prev != null && mPendingKeyDown == null && !isShowingPopupKeysPanel()) {
+                mSwipeMode = true;
+                disallowParentInterceptTouchEvent(true);
+                cancelLongPress();
+                releaseCurrentKey(true); // type the first emoji
+                mCurrentKey = null;
+            } else if (mSwipeMode && prev != null && now - mKeyEnterTime >= SWIPE_DWELL_MS) {
+                releaseCurrentKey(true); // passed through with a short dwell -> type it
+                mCurrentKey = null;
+            }
+            mKeyEnterTime = now;
+            if (mSwipeMode) {
+                releaseCurrentKey(false);
+                mCurrentKey = key;
+                if (key != null) callListenerOnPressKey(key);
+                mLastX = x; mLastY = y;
+                return true;
+            }
             releaseCurrentKey(false);
             mCurrentKey = key;
             cancelLongPress();

@@ -81,6 +81,7 @@ fun PreferencesScreen(
         if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME else null,
         if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST else null,
         if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_USE_FILES else null,
+        if (clipboardHistoryEnabled) ru.klaviatura.clip.Screenshots.PREF else null,
         if (clipboardHistoryEnabled && prefs.getBoolean(Settings.PREF_CLIPBOARD_USE_FILES, Defaults.PREF_CLIPBOARD_USE_FILES))
             Settings.PREF_CLIPBOARD_FILES_SIZE_LIMIT else null,
     )
@@ -194,6 +195,13 @@ fun createPreferencesSettings(context: Context) = listOf(
         val ctx = LocalContext.current
         SwitchPreference(it, Defaults.PREF_CLIPBOARD_USE_FILES) {
             ClipboardDao.getInstance(ctx)?.cleanupFiles(ctx.prefs())
+        }
+    },
+    Setting(context, ru.klaviatura.clip.Screenshots.PREF, R.string.kl_clip_screenshots, R.string.kl_clip_screenshots_summary) {
+        val ctx = LocalContext.current
+        SwitchPreference(it, false) { on ->
+            if (on) ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.clip.MediaPermissionActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     },
     Setting(context, Settings.PREF_CLIPBOARD_FILES_SIZE_LIMIT, R.string.clipboard_history_max_file_size) { setting ->

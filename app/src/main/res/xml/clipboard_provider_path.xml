@@ -3,4 +3,5 @@
     <files-path
         name="clipboard_data"
         path="clipboard/"/>
+    <files-path name="gif" path="gif/"/>
 </paths>

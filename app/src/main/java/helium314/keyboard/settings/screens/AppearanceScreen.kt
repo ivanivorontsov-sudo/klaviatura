@@ -70,9 +70,12 @@ fun AppearanceScreen(
         Settings.PREF_NAVBAR_COLOR,
         SettingsWithoutKey.BACKGROUND_IMAGE,
         SettingsWithoutKey.BACKGROUND_IMAGE_LANDSCAPE,
+        "kl_bg_gen",
         "kl_ai_bg",
         ru.klaviatura.bg.BgFx.PREF_BLUR,
         ru.klaviatura.bg.BgFx.PREF_DIM,
+        "kl_emoji_suggest",
+        ru.klaviatura.emoji.GifPanel.PREF_KEY,
         R.string.settings_category_miscellaneous,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD,
         if (prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE, Defaults.PREF_ENABLE_SPLIT_KEYBOARD)
@@ -213,6 +216,18 @@ fun createAppearanceSettings(context: Context) = listOf(
         R.string.customize_background_image_landscape, R.string.summary_customize_background_image_landscape)
     {
         BackgroundImagePref(it, true)
+    },
+    Setting(context, "kl_emoji_suggest", R.string.kl_emoji_suggest, R.string.kl_emoji_suggest_summary) {
+        helium314.keyboard.settings.preferences.SwitchPreference(it, true)
+    },
+    Setting(context, ru.klaviatura.emoji.GifPanel.PREF_KEY, R.string.kl_gif_key, R.string.kl_gif_key_summary) {
+        helium314.keyboard.settings.preferences.TextInputPreference(it, "", androidx.compose.ui.res.stringResource(R.string.kl_gif_key_summary))
+    },
+    Setting(context, "kl_bg_gen", R.string.kl_bg_gen, R.string.kl_bg_gen_summary) { s ->
+        val ctx = LocalContext.current
+        helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
+            ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.bg.BgGenerateActivity::class.java))
+        })
     },
     Setting(context, "kl_ai_bg", R.string.kl_ai_bg, R.string.kl_ai_bg_summary) { s ->
         val ctx = LocalContext.current

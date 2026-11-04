@@ -102,3 +102,22 @@ class GestureRestartTest {
             VoiceText.format("я живу во владивостоке точка завтра позвоню ивану из москвы", "ru", commands = true))
     }
 }
+
+class ContextCapsTest {
+    @Test fun ambiguousNamesNeedContext() {
+        assertEquals("вера", ProperNouns.case("вера", "моя"))
+        assertEquals("Вера", ProperNouns.case("вера", "привет"))
+        assertEquals("Надежде", ProperNouns.case("надежде", "позвони"))
+        assertEquals("надежда", ProperNouns.case("надежда", "последняя"))
+        assertEquals("верой", ProperNouns.case("верой", "с")) // «с верой в победу»
+        assertEquals("любовь", ProperNouns.case("любовь", "с")) 
+        assertEquals("Розе", ProperNouns.case("розе", "тёте"))
+        assertEquals("роза", ProperNouns.case("роза", null))
+    }
+
+    @Test fun klipyParse() {
+        val body = """{"result":true,"data":{"data":[{"id":1,"file":{"md":{"gif":{"url":"https://x/md.gif"}},"sm":{"jpg":{"url":"https://x/sm.jpg"},"gif":{"url":"https://x/sm.gif"}}}},{"id":2,"file":{}}]}}"""
+        val r = ru.klaviatura.emoji.KlipyApi.parse(body)
+        assertEquals(listOf("https://x/sm.jpg" to "https://x/md.gif"), r)
+    }
+}
