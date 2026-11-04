@@ -40,14 +40,14 @@ class GestureRestartTest {
     @Test fun holdRestartsGesture() {
         val ru = lex("ru"); val d = GlideDecoder(jcuken)
         // wrong start «кошк…», finger slides to «м» and is held there 600 ms, then «мышка» from there
-        val wrong = timed("кошкм", 4, 600)
+        val wrong = timed("кошкм", 4, 1200)
         val (xs, ys, ts) = concat(wrong, timed("мышка", seed = 2))
-        val st = GestureRestart.holdStart(xs, ys, ts, xs.size, kw, 450)
+        val st = GestureRestart.holdStart(xs, ys, ts, xs.size, kw, GestureRestart.DEFAULT_HOLD_MS)
         assertTrue("restart found", st > 0)
         // same gesture but without samples during the hold (only a time gap), as Android may deliver it
         val gx = ArrayList<Int>(); val gy = ArrayList<Int>(); val gt = ArrayList<Int>(); var last = -1
         for (i in xs.indices) { if (last >= 0 && xs[i] - xs[last] in -1..1 && ys[i] == ys[last]) continue; gx.add(xs[i]); gy.add(ys[i]); gt.add(ts[i]); last = i }
-        assertTrue("gap hold found", GestureRestart.holdStart(gx.toIntArray(), gy.toIntArray(), gt.toIntArray(), gx.size, kw, 450) > 0)
+        assertTrue("gap hold found", GestureRestart.holdStart(gx.toIntArray(), gy.toIntArray(), gt.toIntArray(), gx.size, kw, GestureRestart.DEFAULT_HOLD_MS) > 0)
         val top = d.decode(xs.copyOfRange(st, xs.size), ys.copyOfRange(st, ys.size), xs.size - st, listOf(ru to 0.0)).first().word
         println("[restart] hold -> $top"); assertEquals("мышка", top)
     }
@@ -88,7 +88,8 @@ class GestureRestartTest {
             if (seg.isNotEmpty() && (res.isEmpty() || seg[0].cost < res[0].cost - GestureRestart.SEGMENT_MARGIN)) { res = seg; break }
         }
         println("[restart] return: full=${full.firstOrNull()?.word} -> ${res.first().word}")
-        assertEquals("пока", res.first().word)
+        val dbg = "full=${full.take(3).map { it.word + ":" + it.cost }} starts=$starts segs=${starts.map { st -> d.decode(xs.copyOfRange(st, xs.size), ys.copyOfRange(st, ys.size), xs.size - st, listOf(ru to 0.0)).take(2).map { it.word + ":" + it.cost } }}"
+        assertEquals(dbg, "пока", res.first().word)
     }
 
     @Test fun normalWordsThatReturnToStartStayWhole() {
