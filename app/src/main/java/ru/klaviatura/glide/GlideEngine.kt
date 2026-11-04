@@ -21,7 +21,8 @@ import kotlin.math.ln
 object GlideEngine : GlideLearning {
     const val PREF_OWN_GLIDE = "kl_own_glide"
     private var appContext: Context? = null
-    private val lexicons = ConcurrentHashMap<String, Lexicon>()
+    private val lexicons = java.util.concurrent.ConcurrentHashMap<String, Lexicon>()
+    private val loading = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val unigrams = ConcurrentHashMap<String, Int>()
     private val bigrams = ConcurrentHashMap<String, Int>()
     private val forgotten = ConcurrentHashMap.newKeySet<String>()
@@ -35,7 +36,7 @@ object GlideEngine : GlideLearning {
         if (appContext != null) return
         appContext = context.applicationContext
         thread(name = "kl-glide-load") {
-            for (lang in listOf("ru", "en")) { loadLexicon(lang); loadLm(lang) }
+            for (lang in listOf("ru", "en")) { try { loadLexicon(lang); loadLm(lang) } catch (e: Throwable) { } }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
             load()
         }
@@ -46,7 +47,7 @@ object GlideEngine : GlideLearning {
     /** called (on the gesture thread) when a hold restart happens: haptic / trail flash */
     @Volatile var onRestart: (() -> Unit)? = null
     private var lastHoldStart = 0
-    val lms = HashMap<String, BigramLM>()
+    val lms = java.util.concurrent.ConcurrentHashMap<String, BigramLM>()
     private fun loadLm(lang: String) {
         val ctx = appContext ?: return
         try { lms[lang] = ctx.assets.open("glide/${lang}_bigrams.tsv").bufferedReader().useLines { BigramLM.parse(it) } } catch (e: Exception) { }
@@ -67,7 +68,14 @@ object GlideEngine : GlideLearning {
             val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
             lexicons[lang] = lex
             lex
-        } catch (e: Exception) { null }
+        } catch (e: Throwable) { null }
+    }
+
+    /** never blocks the input thread: returns null and loads in background if not ready */
+    private fun lexiconIfReady(lang: String): Lexicon? {
+        lexicons[lang]?.let { return it }
+        if (appContext != null && loading.add(lang)) thread(name = "kl-glide-lex-$lang") { loadLexicon(lang) }
+        return null
     }
 
     fun shouldHandle(): Boolean {
@@ -92,7 +100,7 @@ object GlideEngine : GlideLearning {
         if (keys.isEmpty()) return emptyList()
         val main = keyboard.mId.locale.language
         val langs = (listOf(main) + locales.map { it.language }).distinct()
-        val lex = langs.mapIndexedNotNull { i, l -> loadLexicon(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }
+        val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }
         if (lex.isEmpty()) return emptyList()
         val decoder = GlideDecoder(keys)
         val p = data.mInputPointers

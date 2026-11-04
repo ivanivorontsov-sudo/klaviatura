@@ -11,22 +11,71 @@ import kotlin.math.sqrt
 /** a letter key on the visible keyboard; coordinates are key centers */
 data class GKey(val ch: Char, val cx: Float, val cy: Float, val w: Float, val h: Float)
 
+/**
+ * Memory-compact lexicon (1.2.3): all words in one CharArray + offsets, FloatArray frequencies,
+ * IntArray open-addressing hash for lookups and per-first-letter IntArray lists.
+ * 843k RU forms take ~25 MB instead of ~160 MB with String/HashMap/boxed lists (that OOM'd the IME).
+ */
 class Lexicon(val lang: String) {
-    val words = ArrayList<String>()
-    val logf = ArrayList<Float>()
-    private val index = HashMap<String, Int>()
-    val byFirst = HashMap<Char, MutableList<Int>>()
+    private var buf = CharArray(1 shl 16); private var bufLen = 0
+    private var off = IntArray(1024); private var lf = FloatArray(1024)
+    var size = 0; private set
+    private var table = IntArray(2048) { -1 }
+    private val firstLists = HashMap<Char, IntList>()
     var maxLog = 1f
 
-    fun contains(w: String) = index.containsKey(w)
+    class IntList { var a = IntArray(16); var n = 0
+        fun add(v: Int) { if (n == a.size) a = a.copyOf(n * 2); a[n++] = v } }
+
+    /** word list facade (strings are created on access) */
+    val words: List<String> = object : AbstractList<String>() {
+        override val size get() = this@Lexicon.size
+        override fun get(index: Int) = word(index)
+    }
+    val logf: FloatArray get() = lf
+    val byFirst: Map<Char, IntList> get() = firstLists
+
+    fun word(i: Int) = String(buf, off[i], len(i))
+    fun firstChar(i: Int) = buf[off[i]]
+    private fun len(i: Int) = (if (i + 1 < size) off[i + 1] else bufLen) - off[i]
+
+    private fun hash(w: CharSequence): Int { var h = 0; for (c in w) h = h * 31 + c.code; return h and 0x7fffffff }
+    private fun eq(i: Int, w: CharSequence): Boolean {
+        val l = len(i); if (l != w.length) return false
+        val o = off[i]; for (k in 0 until l) if (buf[o + k] != w[k]) return false; return true
+    }
+    private fun find(w: CharSequence): Int {
+        val m = table.size - 1; var p = hash(w) and m
+        while (true) { val v = table[p]; if (v < 0) return -1; if (eq(v, w)) return v; p = (p + 1) and m }
+    }
+    private fun put(i: Int, w: CharSequence) {
+        val m = table.size - 1; var p = hash(w) and m
+        while (table[p] >= 0) p = (p + 1) and m
+        table[p] = i
+    }
+    private fun grow() {
+        val t = IntArray(table.size * 2) { -1 }; table = t
+        for (i in 0 until size) put(i, String(buf, off[i], len(i)))
+    }
+
+    fun contains(w: String) = find(w) >= 0
+    fun indexOf(w: String) = find(w)
 
     fun add(word: String, count: Long) {
-        if (word.isEmpty() || index.containsKey(word)) return
-        val i = words.size
-        words.add(word); val l = ln(1.0 + count).toFloat(); logf.add(l); maxLog = max(maxLog, l)
-        index[word] = i
-        byFirst.getOrPut(word[0]) { ArrayList() }.add(i)
+        if (word.isEmpty() || find(word) >= 0) return
+        val i = size
+        if (i + 1 >= off.size) { off = off.copyOf(off.size * 2); lf = lf.copyOf(lf.size * 2) }
+        while (bufLen + word.length > buf.size) buf = buf.copyOf(buf.size * 2)
+        word.toCharArray(buf, bufLen); off[i] = bufLen; bufLen += word.length
+        val l = ln(1.0 + count).toFloat(); lf[i] = l; maxLog = max(maxLog, l)
+        size++
+        if (size * 2 > table.size) grow() else put(i, word)
+        firstLists.getOrPut(word[0]) { IntList() }.add(i)
     }
+
+    /** release slack after bulk loading */
+    fun trim() { buf = buf.copyOf(bufLen); off = off.copyOf(size + 1); lf = lf.copyOf(size + 1)
+        firstLists.values.forEach { it.a = it.a.copyOf(it.n) } }
 
     companion object {
         fun parse(lang: String, lines: Sequence<String>): Lexicon {
@@ -35,6 +84,7 @@ class Lexicon(val lang: String) {
                 val t = line.indexOf('\t'); if (t <= 0) continue
                 lex.add(line.substring(0, t), line.substring(t + 1).trim().toLongOrNull() ?: 1L)
             }
+            lex.trim()
             return lex
         }
     }
@@ -50,24 +100,50 @@ object CrossLayout {
 
 /** compact base bigram LM (Leipzig news corpora 2023, CC BY) for context reranking and next-word prediction */
 class BigramLM {
-    private val map = HashMap<String, HashMap<String, Int>>()
+    // compact: vocabulary ids + sorted LongArray keys (prev<<32 | word) + IntArray counts
+    private val vocab = Lexicon("lm")
+    private var keys = LongArray(0); private var counts = IntArray(0); private var totals = IntArray(0)
     private var maxLog = 1.0
+    private var pk = LongArray(1024); private var pc = IntArray(1024); private var pn = 0
+
+    private fun id(w: String): Int { vocab.add(w, 1); return vocab.indexOf(w) }
+
     fun add(prev: String, w: String, c: Int) {
-        map.getOrPut(prev) { HashMap(4) }[w] = c
+        if (pn == pk.size) { pk = pk.copyOf(pn * 2); pc = pc.copyOf(pn * 2) }
+        pk[pn] = (id(prev).toLong() shl 32) or id(w).toLong(); pc[pn] = c; pn++
         maxLog = maxOf(maxLog, ln(1.0 + c))
     }
+
+    fun finish() {
+        val order = (0 until pn).sortedBy { pk[it] }
+        keys = LongArray(pn) { pk[order[it]] }; counts = IntArray(pn) { pc[order[it]] }
+        totals = IntArray(vocab.size); for (i in 0 until pn) totals[(keys[i] ushr 32).toInt()] += counts[i]
+        pk = LongArray(0); pc = IntArray(0); vocab.trim()
+    }
+
+    private fun lower(k: Long): Int { var lo = 0; var hi = keys.size; while (lo < hi) { val m = (lo + hi) ushr 1; if (keys[m] < k) lo = m + 1 else hi = m }; return lo }
+
     /** 0..1 association strength of prev -> w; uses P(w|prev) so frequent words don't dominate */
     fun score(prev: String?, w: String): Double {
         if (prev == null) return 0.0
-        val m = map[prev] ?: return 0.0
-        val c = m[w] ?: return 0.0
-        val tot = m.values.sum().toDouble()
-        return (0.5 * ln(1.0 + c) / maxLog + 0.5 * c / tot).coerceIn(0.0, 1.0)
+        val a = vocab.indexOf(prev); if (a < 0) return 0.0
+        val b = vocab.indexOf(w); if (b < 0) return 0.0
+        val k = (a.toLong() shl 32) or b.toLong(); val i = lower(k)
+        if (i >= keys.size || keys[i] != k) return 0.0
+        val c = counts[i]
+        return (0.5 * ln(1.0 + c) / maxLog + 0.5 * c.toDouble() / totals[a]).coerceIn(0.0, 1.0)
     }
-    fun next(prev: String, n: Int): List<String> = map[prev]?.entries?.sortedByDescending { it.value }?.take(n)?.map { it.key } ?: emptyList()
+
+    fun next(prev: String, n: Int): List<String> {
+        val a = vocab.indexOf(prev); if (a < 0) return emptyList()
+        val s = lower(a.toLong() shl 32); var e = s; while (e < keys.size && (keys[e] ushr 32).toInt() == a) e++
+        return (s until e).sortedByDescending { counts[it] }.take(n).map { vocab.word((keys[it] and 0xffffffffL).toInt()) }
+    }
+
     companion object {
         fun parse(lines: Sequence<String>) = BigramLM().apply {
             for (l in lines) { val p = l.split('\t'); if (p.size == 3) add(p[0], p[1], p[2].toIntOrNull() ?: continue) }
+            finish()
         }
     }
 }
@@ -185,7 +261,8 @@ class GlideDecoder(val keys: List<GKey>) {
         val radius = 1.6f
         for ((lex, langPenalty) in lexicons) {
             // decide whether the lexicon's script is on the keyboard; otherwise map positionally (cross)
-            val sample = lex.words.firstOrNull() ?: continue
+            if (lex.size == 0) continue
+            val sample = lex.word(0)
             val cross = keyFor(sample.first(), false) == null
             val startChars = HashSet<Char>()
             for (c in lex.byFirst.keys) {
@@ -193,8 +270,9 @@ class GlideDecoder(val keys: List<GKey>) {
                 if (dist(sx, sy, k.cx, k.cy) / kw < radius) startChars.add(c)
             }
             for (c in startChars) {
-                for (i in lex.byFirst[c]!!) {
-                    val w = lex.words[i]
+                val fl = lex.byFirst[c]!!
+                for (fi in 0 until fl.n) { val i = fl.a[fi]
+                    val w = lex.word(i)
                     val lastK = keyFor(w.last(), cross) ?: continue
                     if (dist(ex, ey, lastK.cx, lastK.cy) / kw > radius) continue
                     if (learning?.isForgotten(w) == true) continue

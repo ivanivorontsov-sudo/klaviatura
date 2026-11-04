@@ -13,8 +13,8 @@ android {
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.2.3"
+        versionCode = 8
+        versionName = "1.2.4"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))
