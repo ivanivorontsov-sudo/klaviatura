@@ -302,6 +302,8 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         if (steps > 0) subtypeSwitchCount++ else subtypeSwitchCount--
 
         keyboardSwitcher.switchToSubtype(newSubtype)
+        // Klaviatura: voice input follows the layout (also while listening)
+        android.os.Handler(android.os.Looper.getMainLooper()).post { ru.klaviatura.voice.VoiceInput.onLayoutChanged() }
         return true
     }
 

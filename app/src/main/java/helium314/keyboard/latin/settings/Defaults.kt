@@ -104,7 +104,7 @@ object Defaults {
     const val PREF_EMOJI_KEY_FIT = true
     const val PREF_EMOJI_SKIN_TONE = ""
     @JvmField
-    val PREF_SPACE_HORIZONTAL_SWIPE = KeyboardActionListener.SwipeAction.MOVE_CURSOR.name
+    val PREF_SPACE_HORIZONTAL_SWIPE = KeyboardActionListener.SwipeAction.SWITCH_LANGUAGE.name // Klaviatura: swipe on space switches layout
     @JvmField
     val PREF_SPACE_VERTICAL_SWIPE = KeyboardActionListener.SwipeAction.NONE.name
     const val PREF_DELETE_SWIPE = true
