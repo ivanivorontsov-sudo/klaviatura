@@ -373,7 +373,7 @@ public final class EmojiPalettesView extends LinearLayout
             setCurrentCategory(EmojiCategory.Category.RECENTS, true);
             updateEmojiCategoryPageIdView();
         }
-        ru.klaviatura.emoji.GifPanel.attach(this, mPager, mKeyboardActionListener);
+        ru.klaviatura.emoji.GifPanel.INSTANCE.attach(this, mPager, mKeyboardActionListener);
         setupSidePadding();
         initDictionaryFacilitator();
     }
