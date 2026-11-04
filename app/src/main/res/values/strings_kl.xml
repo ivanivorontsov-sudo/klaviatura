@@ -29,4 +29,9 @@
     <string name="kl_emoji_suggest_summary">кот → 🐱, пицца → 🍕</string>
     <string name="kl_gif_key">Ключ KLIPY для поиска GIF</string>
     <string name="kl_gif_key_summary">Необязательно: если в сборке нет ключа, вставьте свой (бесплатно на partner.klipy.com)</string>
+    <string name="kl_reset_theme">Сбросить тему</string>
+    <string name="kl_reset_theme_summary">Тема и цвета по умолчанию, без фоновых картинок, без размытия и затемнения</string>
+    <string name="kl_reset_theme_confirm">Вернуть стандартную тему и цвета, удалить фоновые изображения (дневное и ночное) и сбросить размытие/затемнение?</string>
+    <string name="kl_reset_theme_ok">Сбросить</string>
+    <string name="kl_reset_theme_done">Тема сброшена</string>
 </resources>

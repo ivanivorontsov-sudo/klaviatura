@@ -74,6 +74,7 @@ fun AppearanceScreen(
         "kl_ai_bg",
         ru.klaviatura.bg.BgFx.PREF_BLUR,
         ru.klaviatura.bg.BgFx.PREF_DIM,
+        "kl_reset_theme",
         "kl_emoji_suggest",
         ru.klaviatura.emoji.GifPanel.PREF_KEY,
         R.string.settings_category_miscellaneous,
@@ -216,6 +217,21 @@ fun createAppearanceSettings(context: Context) = listOf(
         R.string.customize_background_image_landscape, R.string.summary_customize_background_image_landscape)
     {
         BackgroundImagePref(it, true)
+    },
+    Setting(context, "kl_reset_theme", R.string.kl_reset_theme, R.string.kl_reset_theme_summary) { s ->
+        val ctx = LocalContext.current
+        var confirm by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+        helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = { confirm = true })
+        if (confirm) helium314.keyboard.settings.dialogs.ConfirmationDialog(
+            onDismissRequest = { confirm = false },
+            onConfirmed = {
+                ru.klaviatura.bg.ThemeReset.reset(ctx)
+                android.widget.Toast.makeText(ctx, R.string.kl_reset_theme_done, android.widget.Toast.LENGTH_SHORT).show()
+                (ctx as? android.app.Activity)?.recreate()
+            },
+            confirmButtonText = androidx.compose.ui.res.stringResource(R.string.kl_reset_theme_ok),
+            content = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.kl_reset_theme_confirm)) }
+        )
     },
     Setting(context, "kl_emoji_suggest", R.string.kl_emoji_suggest, R.string.kl_emoji_suggest_summary) {
         helium314.keyboard.settings.preferences.SwitchPreference(it, true)
