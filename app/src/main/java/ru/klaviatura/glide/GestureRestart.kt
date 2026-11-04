@@ -31,10 +31,10 @@ object GestureRestart {
         // 1.3.1: much more conservative — only a clear retrace back onto the first key after a long path
         if (n < 12) return emptyList()
         val out = ArrayList<Int>()
-        var left = false; var travelled = 0f
+        var left = false; var travelled = 0f; var armed = false
         for (i in 1 until n - 2) {
             travelled += d(xs, ys, i - 1, i)
-            if (!left && d(xs, ys, 0, i) > 3f * kw && travelled > 5f * kw) left = true
+            if (!left && (if (armed) d(xs, ys, 0, i) > 1.5f * kw && travelled > 2f * kw else d(xs, ys, 0, i) > 3f * kw && travelled > 5f * kw)) left = true
             if (left && d(xs, ys, 0, i) < 0.4f * kw) {
                 // reversal: incoming and outgoing directions point opposite-ish
                 val j = maxOf(0, i - 3); val k = minOf(n - 1, i + 3)
@@ -44,7 +44,7 @@ object GestureRestart {
                 if (la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) < -0.2f) {
                     // start the new segment at the point closest to the first key
                     var b = i; for (m in i + 1..minOf(n - 1, i + 6)) if (d(xs, ys, 0, m) < d(xs, ys, 0, b)) b = m
-                    out.add(b); left = false; travelled = 0f }
+                    out.add(b); left = false; travelled = 0f; armed = true }
             }
         }
         return out
