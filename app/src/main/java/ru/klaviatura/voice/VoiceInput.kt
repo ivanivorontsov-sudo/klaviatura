@@ -65,7 +65,7 @@ object VoiceInput {
 
     fun toggle(t: VoiceTarget) { if (listening) stop() else start(t) }
 
-    fun stop() { stopRequested = true }
+    fun stop() { stopRequested = true; refresh() }
 
     /** layout switched -> switch voice language immediately */
     fun onLayoutChanged() {
@@ -138,97 +138,82 @@ object VoiceInput {
 
     private fun model(lang: String): Model = synchronized(loaded) { loaded.getOrPut(lang) { Model(modelDir(lang).absolutePath) } }
 
+    /** microphone level 0..1 for the recording indicator */
+    @Volatile var level = 0f; private set
+    fun statusText() = if (listening) "Слушаю… (${currentLang().uppercase()})" else ""
+
+    private class VoskAsr(m: Model, rate: Float) : Asr {
+        val r = Recognizer(m, rate).apply { setWords(true) }
+        override fun accept(buf: ShortArray, n: Int) = r.acceptWaveForm(buf, n)
+        override fun result(): String = r.result
+        override fun partial(): String = r.partialResult
+        override fun final(): String = r.finalResult
+        override fun close() = r.close()
+    }
+
     @SuppressLint("MissingPermission")
-    private fun runLoop(initial: List<String>) {
-        var langs = initial
+    private fun openRecorder(): AudioRecord {
         val rate = 16000
-        val bufSize = maxOf(AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 4096)
+        val min = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        for (src in listOf(MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.MIC)) {
+            val r = AudioRecord.Builder().setAudioSource(src)
+                .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
+                .setBufferSizeInBytes(maxOf(min, 8192) * 2).build()
+            if (r.state == AudioRecord.STATE_INITIALIZED) {
+                android.util.Log.i("KlVoice", "AudioRecord src=$src rate=${r.sampleRate} ch=${r.channelCount} fmt=${r.audioFormat}")
+                return r
+            }
+            r.release()
+        }
+        throw IllegalStateException("микрофон недоступен")
+    }
+
+    private fun runLoop(initial: List<String>) {
         var rec: AudioRecord? = null
-        var recognizers: List<Pair<String, Recognizer>> = emptyList()
+        var session: VoiceSession? = null
+        val out = object : VoiceOutput {
+            override fun partial(text: String) { main.post { target?.showPartial(text) } }
+            override fun commit(text: String) { main.post { target?.commitPhrase(text) } }
+        }
         try {
-            recognizers = langs.map { l -> l to Recognizer(model(l), rate.toFloat()).apply { setWords(true) } }
-            rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+            rec = openRecorder()
+            // the recognizer gets the REAL rate of the recorder (Vosk resamples if it differs from 16 kHz)
+            val rate = rec.sampleRate.toFloat()
+            val commands = ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false
+            session = VoiceSession(initial.map { it to (VoskAsr(model(it), rate) as Asr) }, out, commands)
             rec.startRecording()
-            val buf = ShortArray(bufSize / 2)
-            var lastSpeech = System.currentTimeMillis()
+            val buf = ShortArray(1600) // 100 ms
+            var lastUi = 0L
             while (!stopRequested) {
                 restartLang?.let { nl ->
-                    // layout changed: finish the current phrase, then continue in the new language
-                    finishPhrase(recognizers, final = true)
-                    recognizers.forEach { it.second.close() }
-                    langs = if (mixed()) listOf(nl, secondLang(nl)).filter { hasModel(it) } else listOf(nl)
-                    if (!hasModel(nl)) { download(nl); stopRequested = true; return@let }
-                    recognizers = langs.map { l -> l to Recognizer(model(l), rate.toFloat()).apply { setWords(true) } }
                     restartLang = null
+                    if (!hasModel(nl)) { download(nl); stopRequested = true; return@let }
+                    val langs = if (mixed()) listOf(nl, secondLang(nl)).filter { hasModel(it) } else listOf(nl)
+                    session.replace(langs.map { it to (VoskAsr(model(it), rate) as Asr) })
                 }
                 if (stopRequested) break
                 val n = rec.read(buf, 0, buf.size)
-                if (n <= 0) continue
-                var phraseDone = false
-                for ((_, r) in recognizers) if (r.acceptWaveForm(buf, n)) phraseDone = true
-                if (phraseDone) { if (finishPhrase(recognizers, false)) lastSpeech = System.currentTimeMillis() }
-                else {
-                    val partial = JSONObject(recognizers[0].second.partialResult).optString("partial")
-                    if (partial.isNotBlank()) { lastSpeech = System.currentTimeMillis(); val p = format(partial, recognizers[0].first, peek = true); main.post { target?.showPartial(p) } }
-                }
-                if (System.currentTimeMillis() - lastSpeech > 8000) break // silence -> stop
+                if (n <= 0) { if (n < 0) throw IllegalStateException("ошибка чтения микрофона $n"); continue }
+                var sum = 0.0; for (i in 0 until n) { val v = buf[i] / 32768.0; sum += v * v }
+                level = (kotlin.math.sqrt(sum / n) * 6).toFloat().coerceIn(0f, 1f)
+                session.feed(buf, n)
+                val now = System.currentTimeMillis()
+                if (now - lastUi > 120) { lastUi = now; refresh() }
+                if (now - session.lastSpeechAt > 6000) break // silence -> stop
             }
-            finishPhrase(recognizers, true)
+            session.finish()
         } catch (e: Exception) {
+            android.util.Log.e("KlVoice", "voice loop", e)
             toast("Ошибка голосового ввода: ${e.message}")
         } finally {
             try { rec?.stop(); rec?.release() } catch (_: Exception) {}
-            recognizers.forEach { try { it.second.close() } catch (_: Exception) {} }
-            listening = false
+            session?.close()
+            listening = false; level = 0f
             main.post { target?.endVoice(); onStateChanged?.invoke() }
         }
     }
 
-    /** picks the best recognizer's result (mixed mode: highest confidence), commits it */
-    private fun finishPhrase(recognizers: List<Pair<String, Recognizer>>, final: Boolean): Boolean {
-        var best: String? = null; var bestLang = ""; var bestConf = -1.0
-        for ((l, r) in recognizers) {
-            val js = JSONObject(if (final) r.finalResult else r.result)
-            val text = js.optString("text")
-            if (text.isBlank()) continue
-            val arr = js.optJSONArray("result")
-            var conf = 0.5
-            if (arr != null && arr.length() > 0) { conf = 0.0; for (i in 0 until arr.length()) conf += arr.getJSONObject(i).optDouble("conf", 0.5); conf /= arr.length() }
-            if (l == recognizers[0].first) conf += 0.05 // prefer the layout language on ties
-            if (conf > bestConf) { bestConf = conf; best = text; bestLang = l }
-        }
-        val text = best ?: return false
-        val out = format(text, bestLang, peek = false)
-        if (out.isNotEmpty()) main.post { target?.commitPhrase(out) }
-        return true
-    }
-
-    /** keeps only words in the script of the language, applies spoken punctuation */
-    fun format(raw: String, lang: String, peek: Boolean): String {
-        val cyr = lang in setOf("ru", "uk", "be", "bg", "sr")
-        var words = raw.trim().split(Regex("\\s+")).filter { w ->
-            w.isNotEmpty() && w.all { ch -> !ch.isLetter() || (if (cyr) ch in '\u0400'..'\u04FF' else ch !in '\u0400'..'\u04FF') }
-        }
-        if (ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false && !peek) words = punctuate(words, lang)
-        return words.joinToString(" ").replace(Regex(" ([,.!?:;])"), "$1").replace(" \n ", "\n").trim()
-    }
-
-    private fun punctuate(words: List<String>, lang: String): List<String> {
-        val cmds = if (lang == "ru") listOf(
-            listOf("вопросительный", "знак") to "?", listOf("восклицательный", "знак") to "!",
-            listOf("новая", "строка") to "\n", listOf("точка") to ".", listOf("запятая") to ",",
-            listOf("двоеточие") to ":", listOf("тире") to " —")
-        else listOf(listOf("question", "mark") to "?", listOf("exclamation", "mark") to "!",
-            listOf("new", "line") to "\n", listOf("period") to ".", listOf("full", "stop") to ".", listOf("comma") to ",", listOf("colon") to ":")
-        val out = ArrayList<String>(); var i = 0
-        loop@ while (i < words.size) {
-            for ((seq, p) in cmds) if (i + seq.size <= words.size && words.subList(i, i + seq.size).map { it.lowercase() } == seq) {
-                out.add(p); i += seq.size; continue@loop
-            }
-            out.add(words[i]); i++
-        }
-        return out
-    }
 }
 
 /** implemented by the IME: where voice text goes */

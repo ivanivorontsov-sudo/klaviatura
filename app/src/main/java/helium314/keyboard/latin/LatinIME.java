@@ -550,14 +550,17 @@ public class LatinIME extends InputMethodService implements
         @Override public void showPartial(@NonNull String text) {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
+            if (text.isEmpty() && !composing) return;
+            // partial text REPLACES the previous partial (composing region), it is never appended
             ic.setComposingText(text, 1);
-            composing = true;
+            composing = !text.isEmpty();
         }
         @Override public void commitPhrase(@NonNull String text) {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
-            CharSequence before = ic.getTextBeforeCursor(2, 0);
+            ic.beginBatchEdit();
             if (composing) { ic.setComposingText("", 1); composing = false; }
+            CharSequence before = ic.getTextBeforeCursor(2, 0); // read AFTER removing the partial
             String t = text;
             boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
                     || before.toString().trim().matches(".*[.!?]$");
@@ -566,18 +569,31 @@ public class LatinIME extends InputMethodService implements
             if (before != null && before.length() > 0 && !Character.isWhitespace(before.charAt(before.length() - 1))
                     && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0))) t = " " + t;
             ic.commitText(t, 1);
+            ic.endBatchEdit();
         }
         @Override public void endVoice() {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic != null && composing) { ic.finishComposingText(); composing = false; }
+            // voice wrote directly into the editor: resync the IME's text cache so it doesn't re-insert stale words
+            mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(
+                    mInputLogic.mConnection.getExpectedSelectionStart(), mInputLogic.mConnection.getExpectedSelectionEnd(), false);
+            mHandler.postDelayed(() -> mVoiceSettling = false, 400);
         }
     };
+    private boolean mVoiceSettling = false;
+
 
     @Override
     public void onCreate() {
         ru.klaviatura.voice.VoiceInput.INSTANCE.init(this);
         ru.klaviatura.glide.GlideEngine.INSTANCE.init(this);
-        ru.klaviatura.voice.VoiceInput.INSTANCE.setOnStateChanged(() -> { final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView(); if (v != null) v.invalidateAllKeys(); return kotlin.Unit.INSTANCE; });
+        ru.klaviatura.voice.VoiceInput.INSTANCE.setOnStateChanged(() -> {
+            final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView();
+            if (v != null) v.invalidateAllKeys();
+            if (mSuggestionStripView != null) mSuggestionStripView.updateVoiceState(
+                    ru.klaviatura.voice.VoiceInput.INSTANCE.getListening(), ru.klaviatura.voice.VoiceInput.INSTANCE.getLevel(),
+                    ru.klaviatura.voice.VoiceInput.INSTANCE.statusText());
+            return kotlin.Unit.INSTANCE; });
         mSettings.startListener();
         KeyboardIconsSet.Companion.getInstance().loadIcons(this);
         mRichImm = RichInputMethodManager.getInstance();
@@ -1116,6 +1132,13 @@ public class LatinIME extends InputMethodService implements
         // not attempt recorrection. This is true even with a hardware keyboard connected: if the
         // view is not displayed we have no means of showing suggestions anyway, and if it is then
         // we want to show suggestions anyway.
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening() || mVoiceSettling) {
+            // root cause of «один ты четыреты ты ты ты…»: the keyboard's own input logic reacted to the
+            // voice edits (restarting suggestions on the touched word and re-composing it), mixing its stale
+            // word with the voice text. While voice is active only the voice pipeline edits the text.
+            mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
+            return;
+        }
         final SettingsValues settingsValues = mSettings.getCurrent();
         if (isInputViewShown()
                 && mInputLogic.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
@@ -1462,6 +1485,11 @@ public class LatinIME extends InputMethodService implements
     public void onEvent(@NonNull final Event event) {
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
             if (ru.klaviatura.voice.VoiceInput.INSTANCE.builtinEnabled()) {
+                if (!ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) {
+                    // commit what the keyboard itself is composing, so voice and typing never share a composing region
+                    mInputLogic.finishInput();
+                    mVoiceSettling = true;
+                }
                 ru.klaviatura.voice.VoiceInput.INSTANCE.toggle(mVoiceTarget);
                 return;
             }

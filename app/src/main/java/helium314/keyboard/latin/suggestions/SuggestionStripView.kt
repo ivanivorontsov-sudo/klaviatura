@@ -500,6 +500,31 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
+    // ---- Клавиатура: recording state (red pulsing mic + «Слушаю…» + level meter, tap to stop) ----
+    private var voiceOverlay: TextView? = null
+    fun updateVoiceState(listening: Boolean, level: Float, text: String) {
+        val red = 0xFFE53935.toInt()
+        val scale = if (listening) 1f + 0.35f * level.coerceIn(0f, 1f) else 1f
+        for (g in listOf(toolbar, pinnedKeys)) (g.findViewWithTag<View>(ToolbarKey.VOICE) as? android.widget.ImageView)?.let { v ->
+            if (listening) v.setColorFilter(red) else v.clearColorFilter()
+            v.scaleX = scale; v.scaleY = scale
+        }
+        if (!listening) { voiceOverlay?.isVisible = false; return }
+        val o = voiceOverlay ?: TextView(context).also { tv ->
+            tv.gravity = android.view.Gravity.CENTER
+            tv.setTextColor(Color.WHITE)
+            tv.textSize = 15f
+            tv.background = GradientDrawable().apply { setColor(0xEEB71C1C.toInt()); cornerRadius = 18f }
+            tv.setOnClickListener { ru.klaviatura.voice.VoiceInput.stop() }
+            addView(tv, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            voiceOverlay = tv
+        }
+        val bars = (level.coerceIn(0f, 1f) * 8).toInt()
+        o.text = "🎤 $text  " + "▮".repeat(bars) + "▯".repeat(8 - bars) + "   ■ стоп"
+        o.alpha = 0.85f + 0.15f * level.coerceIn(0f, 1f)
+        o.isVisible = true; o.bringToFront()
+    }
+
     fun updateVoiceKey() {
         val show = Settings.getValues().mShowsVoiceInputKey
         toolbar.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show

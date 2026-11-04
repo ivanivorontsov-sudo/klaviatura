@@ -73,8 +73,8 @@ class ClipboardDao private constructor(private val db: Database) {
 
     fun addClipUri(timestamp: Long, pinned: Boolean, uri: Uri, description: ClipDescription, context: Context) = synchronized(this) {
         clearOldClips()
-        val extension = if (description.mimeTypeCount == 0) ""
-            else ".${MimeTypeMap.getSingleton().getExtensionFromMimeType(description.getMimeType(0))}"
+        val extension = (0 until description.mimeTypeCount).firstNotNullOfOrNull {
+            MimeTypeMap.getSingleton().getExtensionFromMimeType(description.getMimeType(it)) }?.let { ".$it" } ?: ""
         val tempFile = File(context.filesDir, "temp_clip")
         tempFile.delete()
         runCatching { FileUtils.copyContentUriToNewFile(uri, context, tempFile) }.onFailure { return@synchronized }

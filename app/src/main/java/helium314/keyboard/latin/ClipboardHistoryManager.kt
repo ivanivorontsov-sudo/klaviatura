@@ -78,12 +78,20 @@ class ClipboardHistoryManager(
         val description = clipData.description ?: return
         val timeStamp = ClipboardManagerCompat.getClipTimestamp(clipData)
 
-        if (description.hasMimeType("text/*")) {
+        // Klaviatura: screenshots/galleries often put an image URI with an empty text or a "text/uri-list"
+        // description, or a description without mime type; detect the real type of the URI
+        val uri = clipItem.uri
+        val uriType = uri?.let { runCatching { latinIME.contentResolver.getType(it) }.getOrNull() }
+        val isFile = uri != null && (uriType?.startsWith("text/") == false || !description.hasMimeType("text/*")
+                || (clipItem.text.isNullOrEmpty() && uri.scheme == "content"))
+        if (isFile && maySaveFromUri(uri, latinIME)) {
+            val desc = if (uriType != null && !description.hasMimeType(uriType))
+                android.content.ClipDescription(description.label, arrayOf(uriType)) else description
+            clipboardDao?.addClipUri(timeStamp, false, uri!!, desc, latinIME)
+        } else if (description.hasMimeType("text/*") || clipItem.text != null) {
             val content = clipItem.coerceToText(latinIME)
             if (TextUtils.isEmpty(content)) return
             clipboardDao?.addClip(timeStamp, false, content.toString())
-        } else if (maySaveFromUri(clipItem.uri, latinIME)) {
-            clipboardDao?.addClipUri(timeStamp, false, clipItem.uri, description, latinIME)
         }
     }
 
@@ -275,9 +283,10 @@ class ClipboardHistoryManager(
             if (uri == null || !saveUriData) return false
             try {
                 context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null).use {
-                    if (it?.moveToFirst() != true) return false
+                    // size unknown (some screenshot/gallery providers): allow, the size limit is enforced after copying
+                    if (it?.moveToFirst() != true || it.isNull(0)) return true
                     val size = it.getLong(0)
-                    return size <= maxSize * 1000000 // maxSize is megabytes
+                    return size <= maxSize * 1000000L // maxSize is megabytes
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "error checking clip size", e) // happens with SecurityException: Permission Denial

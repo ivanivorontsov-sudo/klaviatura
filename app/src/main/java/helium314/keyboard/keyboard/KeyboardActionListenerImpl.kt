@@ -158,7 +158,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         val editorMimeTypes = EditorInfoCompat.getContentMimeTypes(editorInfo)
         if (editorMimeTypes.any { content.description.hasMimeType(it) }) {
             connection.commitContent(content, editorInfo)
-        } else if (editorMimeTypes.isEmpty()) { // make the fallback optional?
+        } else { // Klaviatura: always try the system-clipboard paste fallback (field accepts other types or none)
             latinIME.clipboardHistoryManager.pasteWithoutChangingClips(content)
         }
     }
