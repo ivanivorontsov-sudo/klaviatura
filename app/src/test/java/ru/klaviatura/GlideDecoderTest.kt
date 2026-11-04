@@ -17,7 +17,7 @@ class GlideDecoderTest {
         fun rows(rows: List<String>, offsets: List<Float>) = rows.flatMapIndexed { r, s ->
             s.mapIndexed { i, c -> GKey(c, offsets[r] + W / 2 + W * i, H / 2 + H * r, W, H) }
         }
-        val jcuken = rows(listOf("йцукенгшщзх", "фывапролджэ", "ячсмитьбю"), listOf(0f, 0f, 150f))
+        val jcuken = rows(listOf("йцукенгшщзхъ", "фывапролджэ", "ячсмитьбю"), listOf(0f, 0f, 150f))
         val qwerty = rows(listOf("qwertyuiop", "asdfghjkl", "zxcvbnm"), listOf(0f, 50f, 150f))
         val SPACE = 550f to 525f
         val GLOBE = 200f to 525f

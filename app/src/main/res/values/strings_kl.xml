@@ -15,4 +15,6 @@
     <string name="kl_bg_dim">Затемнение / осветление фона</string>
     <string name="kl_ai_bg">ИИ-фон через веб-чат</string>
     <string name="kl_ai_bg_summary">Qwen, ChatGPT, Gemini, Grok, Алиса… Без API — вход в чат запоминается</string>
+    <string name="kl_voice_import">Импорт голосовой модели из файла</string>
+    <string name="kl_voice_import_summary">Выберите .zip модели Vosk (vosk-model-small-ru / -en), если скачивание не работает</string>
 </resources>

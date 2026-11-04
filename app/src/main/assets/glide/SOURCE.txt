@@ -1,1 +1,3 @@
 Frequency lists: hermitdave/FrequencyWords (2018, OpenSubtitles), CC-BY-SA-4.0 content / MIT code.
+Merged (1.2.0) with the full HeliBoard/AOSP wordlists main_ru.combined (+ main_ru__experimental, f>=20) and main_en_US.combined (all word forms),
+https://codeberg.org/Helium314/aosp-dictionaries (Apache-2.0 / CC-BY-SA where applicable).

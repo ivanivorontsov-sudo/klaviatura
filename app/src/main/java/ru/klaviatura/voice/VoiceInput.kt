@@ -18,9 +18,6 @@ import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
 /**
@@ -33,10 +30,6 @@ object VoiceInput {
     const val PREF_MIXED = "kl_voice_mixed"
     const val PREF_COMMANDS = "kl_voice_commands"
 
-    private val MODELS = mapOf(
-        "ru" to "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
-        "en" to "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
-    )
     private val main = Handler(Looper.getMainLooper())
     private var ctx: Context? = null
     @Volatile var listening = false; private set
@@ -67,8 +60,8 @@ object VoiceInput {
     }
 
     fun modelDir(lang: String) = File(ctx!!.filesDir, "vosk/$lang")
-    fun hasModel(lang: String) = File(modelDir(lang), "am").exists() || File(modelDir(lang), "conf").exists()
-    fun supported(lang: String) = MODELS.containsKey(lang)
+    fun hasModel(lang: String) = ModelDownloader.isModelDir(modelDir(lang))
+    fun supported(lang: String) = ModelDownloader.MIRRORS.containsKey(lang)
 
     fun toggle(t: VoiceTarget) { if (listening) stop() else start(t) }
 
@@ -85,15 +78,20 @@ object VoiceInput {
     fun start(t: VoiceTarget) {
         val c = ctx ?: return
         target = t
-        if (c.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            c.startActivity(Intent(c, VoicePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return
-        }
         val lang = currentLang()
         if (!supported(lang)) { toast("Голос для языка «$lang» пока не поддерживается"); return }
         val langs = if (mixed()) listOf(lang, secondLang(lang)) else listOf(lang)
+        // ROOT CAUSE FIX (1.2.0): earlier the mic permission was checked first and the method returned,
+        // so on first use the download never started (the permission screen just closed). Now the model
+        // download starts immediately, independent of the mic permission.
         val missing = langs.filter { !hasModel(it) }
-        if (missing.isNotEmpty()) { missing.forEach { download(it) }; return }
+        if (missing.isNotEmpty()) missing.forEach { download(it) }
+        if (c.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            try { c.startActivity(Intent(c, VoicePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { toast("Разрешите доступ к микрофону в настройках приложения") }
+            return
+        }
+        if (missing.isNotEmpty()) return
         listening = true; stopRequested = false; restartLang = null
         onStateChanged?.invoke()
         thread(name = "kl-voice") { runLoop(langs) }
@@ -107,54 +105,31 @@ object VoiceInput {
         if (!downloading.add(lang)) { toast("Модель «$lang» ещё скачивается — прогресс в уведомлении"); return }
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            c.startActivity(Intent(c, VoicePermissionActivity::class.java).putExtra("notif", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            try { c.startActivity(Intent(c, VoicePermissionActivity::class.java).putExtra("notif", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
         val n = DownloadNotifier(c, lang)
         toast("Скачиваю офлайн-модель голоса ($lang). Прогресс — на кнопке микрофона и в уведомлении")
         progress[lang] = 0; refresh()
         thread(name = "kl-voice-dl") {
-            val dir = modelDir(lang); val tmp = File(dir.parentFile, "$lang.tmp"); val zipFile = File(dir.parentFile, "$lang.zip")
             try {
-                dir.parentFile?.mkdirs()
-                val conn = URL(MODELS[lang]).openConnection() as HttpURLConnection
-                conn.connectTimeout = 20000; conn.readTimeout = 60000
-                if (conn.responseCode !in 200..299) throw java.io.IOException("сервер ответил ${conn.responseCode}")
-                val total = conn.contentLengthLong
-                var done = 0L; var lastPct = -1; var lastT = 0L
-                conn.inputStream.use { inp -> zipFile.outputStream().use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        val r = inp.read(buf); if (r < 0) break
-                        out.write(buf, 0, r); done += r
+                modelDir(lang).parentFile?.mkdirs()
+                var lastPct = -1; var lastT = 0L
+                ModelDownloader.download(lang, modelDir(lang), object : ModelDownloader.Listener {
+                    override fun onProgress(done: Long, total: Long, mirror: Int) {
                         val pct = if (total > 0) (done * 100 / total).toInt() else 0
                         val now = System.currentTimeMillis()
                         if (pct != lastPct && now - lastT > 300) { lastPct = pct; lastT = now; progress[lang] = pct; n.progress(pct, done, total); refresh() }
                     }
-                } }
-                if (total > 0 && done < total) throw java.io.IOException("загрузка оборвалась (${mb(done)} из ${mb(total)} МБ)")
-                progress[lang] = -1; n.unzipping(); refresh()
-                tmp.deleteRecursively(); tmp.mkdirs()
-                ZipInputStream(zipFile.inputStream().buffered()).use { zip ->
-                    while (true) {
-                        val e = zip.nextEntry ?: break
-                        val name = e.name.substringAfter('/') // strip top level folder
-                        if (name.isEmpty() || name.contains("..")) continue
-                        val f = File(tmp, name)
-                        if (e.isDirectory) f.mkdirs() else { f.parentFile?.mkdirs(); f.outputStream().use { zip.copyTo(it) } }
-                    }
-                }
-                dir.deleteRecursively(); tmp.renameTo(dir)
+                    override fun onUnzip() { progress[lang] = -1; n.unzipping(); refresh() }
+                    override fun onMirrorFailed(url: String, error: String) { android.util.Log.w("KlVoice", "mirror failed $url: $error") }
+                })
                 n.done()
                 toast("Модель голоса «$lang» готова — нажмите микрофон")
             } catch (e: Exception) {
-                tmp.deleteRecursively()
-                val msg = when (e) {
-                    is java.net.UnknownHostException -> "нет интернета"
-                    is java.net.SocketTimeoutException -> "сервер не отвечает"
-                    else -> e.message ?: e.javaClass.simpleName
-                }
+                android.util.Log.e("KlVoice", "download failed", e)
+                val msg = ModelDownloader.humanError(e)
                 n.error(msg)
-                toast("Не удалось скачать модель «$lang»: $msg. Нажмите «Повторить» в уведомлении или микрофон ещё раз")
-            } finally { zipFile.delete(); downloading.remove(lang); progress.remove(lang); refresh() }
+                toast("Не удалось скачать модель «$lang»: $msg. «Повторить» в уведомлении или импорт из файла в настройках")
+            } finally { downloading.remove(lang); progress.remove(lang); refresh() }
         }
     }
 
