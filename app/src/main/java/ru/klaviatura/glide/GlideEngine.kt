@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package ru.klaviatura.glide
 
+import helium314.keyboard.latin.utils.prefs
 import android.content.Context
 import helium314.keyboard.keyboard.Keyboard
 import helium314.keyboard.latin.NgramContext
@@ -35,10 +36,16 @@ object GlideEngine : GlideLearning {
         appContext = context.applicationContext
         thread(name = "kl-glide-load") {
             for (lang in listOf("ru", "en")) { loadLexicon(lang); loadLm(lang) }
+            try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
             load()
         }
     }
 
+    const val PREF_HOLD_MS = "kl_swipe_hold_restart_ms"
+    @Volatile var holdMs = 450
+    /** called (on the gesture thread) when a hold restart happens: haptic / trail flash */
+    @Volatile var onRestart: (() -> Unit)? = null
+    private var lastHoldStart = 0
     val lms = HashMap<String, BigramLM>()
     private fun loadLm(lang: String) {
         val ctx = appContext ?: return
@@ -72,7 +79,7 @@ object GlideEngine : GlideLearning {
     fun predictions(ngram: NgramContext): List<SuggestedWordInfo> {
         val prev = ngram.getNthPrevWord(1)?.toString() ?: return emptyList()
         return predictNext(prev, 3).mapIndexed { i, w ->
-            SuggestedWordInfo(w, "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ProperNouns.case(w), "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 
@@ -90,8 +97,23 @@ object GlideEngine : GlideLearning {
         val decoder = GlideDecoder(keys)
         val p = data.mInputPointers
         val prev = ngram.getNthPrevWord(1)?.toString()?.lowercase()
-        val res = decoder.decode(p.xCoordinates, p.yCoordinates, p.pointerSize, lex, this, prev)
-        val guess = decoder.rawGuess(p.xCoordinates, p.yCoordinates, p.pointerSize)
+        holdMs = appContext?.let { it.prefs().getInt(PREF_HOLD_MS, 450) } ?: 450
+        var xs = p.xCoordinates; var ys = p.yCoordinates; var n = p.pointerSize
+        // (a) hold-to-restart: drop everything before the last long still point
+        val hs = GestureRestart.holdStart(xs, ys, p.times, n, decoder.kw, holdMs)
+        if (hs > 0) {
+            xs = xs.copyOfRange(hs, n); ys = ys.copyOfRange(hs, n); n -= hs
+            if (hs != lastHoldStart) { lastHoldStart = hs; onRestart?.invoke() }
+        } else lastHoldStart = 0
+        var res = decoder.decode(xs, ys, n, lex, this, prev)
+        // (b) returned to the start and went again: decode the latest segment, keep it only if clearly better
+        for (st in GestureRestart.returnStarts(xs, ys, n, decoder.kw).asReversed()) {
+            val seg = decoder.decode(xs.copyOfRange(st, n), ys.copyOfRange(st, n), n - st, lex, this, prev)
+            if (seg.isNotEmpty() && (res.isEmpty() || seg[0].cost < res[0].cost - GestureRestart.SEGMENT_MARGIN)) {
+                res = seg; xs = xs.copyOfRange(st, n); ys = ys.copyOfRange(st, n); n -= st; break
+            }
+        }
+        val guess = decoder.rawGuess(xs, ys, n)
         val all = if (guess != null && res.none { it.word == guess })
             res.toMutableList().apply { add(minOf(3, size), GlideCandidate(guess, main, (res.getOrNull(minOf(3, size) - 1)?.cost ?: 0.0) + 0.01, false)) } else res
         lastDecoder = decoder; lastCandidates = all // picking the guess teaches the word (see learn)
@@ -99,7 +121,7 @@ object GlideEngine : GlideLearning {
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION
-            SuggestedWordInfo(c.word, "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ProperNouns.case(c.word), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 

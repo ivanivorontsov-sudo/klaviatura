@@ -19,4 +19,6 @@
     <string name="kl_voice_engine_vosk_summary">По умолчанию используется нейросеть Zipformer (sherpa-onnx, ~29 МБ, быстрее и точнее). Включите, чтобы вернуться к Vosk</string>
     <string name="kl_voice_import">Импорт голосовой модели из файла</string>
     <string name="kl_voice_import_summary">Выберите .zip модели Vosk (vosk-model-small-ru / -en), если скачивание не работает</string>
+    <string name="kl_swipe_hold_restart">Перезапуск свайпа удержанием</string>
+    <string name="kl_swipe_hold_restart_off">Выключено</string>
 </resources>

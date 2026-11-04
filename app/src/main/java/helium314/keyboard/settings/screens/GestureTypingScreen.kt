@@ -39,6 +39,7 @@ fun GestureTypingScreen(
     val items = listOf(
         Settings.PREF_GESTURE_INPUT,
         if (gestureEnabled) ru.klaviatura.glide.GlideEngine.PREF_OWN_GLIDE else null,
+        if (gestureEnabled) ru.klaviatura.glide.GlideEngine.PREF_HOLD_MS else null,
         if (gestureEnabled) "kl_learn_export" else null,
         if (gestureEnabled) "kl_learn_import" else null,
         ru.klaviatura.voice.VoiceInput.PREF_ENGINE,
@@ -94,6 +95,18 @@ fun createGestureTypingSettings(context: Context) = listOf(
         helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
             ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.voice.ModelImportActivity::class.java))
         })
+    },
+    Setting(context, ru.klaviatura.glide.GlideEngine.PREF_HOLD_MS, R.string.kl_swipe_hold_restart) { def ->
+        SliderPreference(
+            name = def.title,
+            key = def.key,
+            default = 450,
+            range = 0f..1000f,
+            description = {
+                if (it <= 0) stringResource(R.string.kl_swipe_hold_restart_off)
+                else stringResource(R.string.abbreviation_unit_milliseconds, it.toString())
+            }
+        )
     },
     Setting(context, ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK, R.string.kl_voice_engine_vosk, R.string.kl_voice_engine_vosk_summary) {
         SwitchPreference(it, false)

@@ -95,7 +95,19 @@ object VoiceText {
         }
         words = dedupe(words)
         if (commands) words = punctuate(words, lang)
+        words = capitalize(words)
         return words.joinToString(" ").replace(Regex(" ([,.!?:;])"), "$1").replace(" \n ", "\n").trim()
+    }
+
+    /** proper nouns (Москвы, Ивану) and the first word after . ! ? or a new line; the very first word is handled by the editor side */
+    fun capitalize(words: List<String>): List<String> {
+        var start = false
+        return words.map { w ->
+            var r = ru.klaviatura.glide.ProperNouns.case(w)
+            if (start && r.firstOrNull()?.isLetter() == true) r = r.replaceFirstChar { it.uppercaseChar() }
+            if (r.isNotEmpty()) start = r.last() in ".!?\n"
+            r
+        }
     }
 
     /** «ты ты ты ты» -> «ты»: the same word repeated 3+ times in a row is a recognizer loop, not speech */

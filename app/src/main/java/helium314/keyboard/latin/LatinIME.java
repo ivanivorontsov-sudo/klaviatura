@@ -587,6 +587,13 @@ public class LatinIME extends InputMethodService implements
     public void onCreate() {
         ru.klaviatura.voice.VoiceInput.INSTANCE.init(this);
         ru.klaviatura.glide.GlideEngine.INSTANCE.init(this);
+        ru.klaviatura.glide.GlideEngine.INSTANCE.setOnRestart(() -> {
+            mHandler.post(() -> {
+                final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView();
+                if (v != null) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP,
+                        android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+            });
+            return kotlin.Unit.INSTANCE; });
         ru.klaviatura.voice.VoiceInput.INSTANCE.setOnStateChanged(() -> {
             final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView();
             if (v != null) v.invalidateAllKeys();
