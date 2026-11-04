@@ -34,9 +34,23 @@ object GlideEngine : GlideLearning {
         if (appContext != null) return
         appContext = context.applicationContext
         thread(name = "kl-glide-load") {
-            for (lang in listOf("ru", "en")) loadLexicon(lang)
+            for (lang in listOf("ru", "en")) { loadLexicon(lang); loadLm(lang) }
             load()
         }
+    }
+
+    val lms = HashMap<String, BigramLM>()
+    private fun loadLm(lang: String) {
+        val ctx = appContext ?: return
+        try { lms[lang] = ctx.assets.open("glide/${lang}_bigrams.tsv").bufferedReader().useLines { BigramLM.parse(it) } } catch (e: Exception) { }
+    }
+
+    /** next-word predictions from user bigrams first, then the base LM */
+    fun predictNext(prev: String, n: Int = 3): List<String> {
+        val p = prev.lowercase()
+        val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
+        val base = lms.values.flatMap { it.next(p, n) }
+        return (user + base).filter { !isForgotten(it) }.distinct().take(n)
     }
 
     private fun loadLexicon(lang: String): Lexicon? {
@@ -52,6 +66,14 @@ object GlideEngine : GlideLearning {
     fun shouldHandle(): Boolean {
         val ctx = appContext ?: return false
         return !JniUtils.sHaveGestureLib || ctx.prefs().getBoolean(PREF_OWN_GLIDE, true)
+    }
+
+    /** next-word predictions as suggestion infos (low score, so HeliBoard's own predictions keep priority) */
+    fun predictions(ngram: NgramContext): List<SuggestedWordInfo> {
+        val prev = ngram.getNthPrevWord(1)?.toString() ?: return emptyList()
+        return predictNext(prev, 3).mapIndexed { i, w ->
+            SuggestedWordInfo(w, "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+        }
     }
 
     fun suggest(keyboard: Keyboard, data: ComposedData, ngram: NgramContext, locales: List<Locale>): List<SuggestedWordInfo> {
@@ -84,7 +106,8 @@ object GlideEngine : GlideLearning {
     // ---- learning (local only) ----
     override fun wordBoost(word: String): Double = unigrams[word]?.let { 0.25 * ln(1.0 + it) } ?: 0.0
     override fun bigramBoost(prev: String?, word: String): Double =
-        if (prev == null) 0.0 else bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0
+        if (prev == null) 0.0 else (bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
+            GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(prev, word) } ?: 0.0)
     override fun isForgotten(word: String) = forgotten.contains(word)
 
     /** called for every committed word (typed, swiped or picked from suggestions) */

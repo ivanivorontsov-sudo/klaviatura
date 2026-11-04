@@ -520,6 +520,11 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         }
 
         includeAtLeastTwoWordSuggestions(suggestionResults, suggestionsArray, composedData.mTypedWord)
+        if (composedData.mTypedWord.isEmpty()) {
+            val have = suggestionResults.map { it.mWord.lowercase() }.toHashSet()
+            val extra = ru.klaviatura.glide.GlideEngine.predictions(ngramContext).filter { it.mWord !in have }
+            suggestionResults.addAll(extra)
+        }
 
         return suggestionResults
     }

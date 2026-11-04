@@ -48,6 +48,30 @@ object CrossLayout {
     val cyrToLat = HashMap<Char, Char>().apply { latToCyr.forEach { (k, v) -> put(v, k) } }
 }
 
+/** compact base bigram LM (Leipzig news corpora 2023, CC BY) for context reranking and next-word prediction */
+class BigramLM {
+    private val map = HashMap<String, HashMap<String, Int>>()
+    private var maxLog = 1.0
+    fun add(prev: String, w: String, c: Int) {
+        map.getOrPut(prev) { HashMap(4) }[w] = c
+        maxLog = maxOf(maxLog, ln(1.0 + c))
+    }
+    /** 0..1 association strength of prev -> w; uses P(w|prev) so frequent words don't dominate */
+    fun score(prev: String?, w: String): Double {
+        if (prev == null) return 0.0
+        val m = map[prev] ?: return 0.0
+        val c = m[w] ?: return 0.0
+        val tot = m.values.sum().toDouble()
+        return (0.5 * ln(1.0 + c) / maxLog + 0.5 * c / tot).coerceIn(0.0, 1.0)
+    }
+    fun next(prev: String, n: Int): List<String> = map[prev]?.entries?.sortedByDescending { it.value }?.take(n)?.map { it.key } ?: emptyList()
+    companion object {
+        fun parse(lines: Sequence<String>) = BigramLM().apply {
+            for (l in lines) { val p = l.split('\t'); if (p.size == 3) add(p[0], p[1], p[2].toIntOrNull() ?: continue) }
+        }
+    }
+}
+
 data class GlideCandidate(val word: String, val lang: String, val cost: Double, val cross: Boolean)
 
 /** learned data: word/bigram counts, forgotten words and user's gesture bias (in key widths) */
@@ -231,6 +255,8 @@ class GlideDecoder(val keys: List<GKey>) {
         const val MISS_W = 2.5
         const val LEN_W = 0.6
         const val FREQ_W = 1.1
+        /** weight of base context LM: modest, geometry dominates */
+        const val CTX_W = 0.6
         const val CROSS_PENALTY = 0.45
 
         fun dist(ax: Float, ay: Float, bx: Float, by: Float): Float { val dx = ax - bx; val dy = ay - by; return sqrt(dx * dx + dy * dy) }
