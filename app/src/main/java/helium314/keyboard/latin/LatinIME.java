@@ -587,6 +587,18 @@ public class LatinIME extends InputMethodService implements
     public void onCreate() {
         ru.klaviatura.voice.VoiceInput.INSTANCE.init(this);
         ru.klaviatura.glide.GlideEngine.INSTANCE.init(this);
+        // AI background is applied from a separate process (:aibg): it notifies us by a package-local broadcast
+        try {
+            final android.content.BroadcastReceiver bgReceiver = new android.content.BroadcastReceiver() {
+                @Override public void onReceive(android.content.Context c, android.content.Intent i) {
+                    Settings.clearCachedBackgroundImages();
+                    KeyboardSwitcher.getInstance().setThemeNeedsReload();
+                }
+            };
+            androidx.core.content.ContextCompat.registerReceiver(this, bgReceiver,
+                    new android.content.IntentFilter(ru.klaviatura.bg.AiBackgroundActivity.ACTION_BG_CHANGED),
+                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
+        } catch (Exception e) { android.util.Log.w("Klaviatura", "bg receiver", e); }
         ru.klaviatura.glide.GlideEngine.INSTANCE.setOnRestart(() -> {
             mHandler.post(() -> {
                 final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView();

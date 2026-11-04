@@ -18,7 +18,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -65,17 +64,44 @@ class AiBackgroundActivity : Activity() {
             "низкий контраст, без текста, без букв, без мелких деталей и ярких пятен, приятно для глаз в тёмной и светлой теме."
     }
 
+    /** images may be captured only after the prompt was sent (armed), never on login / start pages */
+    private var armed = false
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        chats.forEach { (name, url) -> bar.addView(Button(this).apply { text = name; isAllCaps = false; setOnClickListener { open(url) } }) }
-        bar.addView(Button(this).apply { text = "Промпт"; isAllCaps = false; setOnClickListener { copyPrompt(); injectPrompt() } })
+        // edge-to-edge (targetSdk 35): keep our content below the status bar and above the IME / nav bar
+        root.setOnApplyWindowInsetsListener { v, ins ->
+            val t = if (android.os.Build.VERSION.SDK_INT >= 30)
+                ins.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.ime())
+            else null
+            if (t != null) v.setPadding(t.left, t.top, t.right, t.bottom)
+            else @Suppress("DEPRECATION") v.setPadding(ins.systemWindowInsetLeft, ins.systemWindowInsetTop, ins.systemWindowInsetRight, ins.systemWindowInsetBottom)
+            ins
+        }
+        root.addView(TextView(this).apply { text = "ИИ-фон"; textSize = 20f; setPadding(24, 16, 24, 4) })
+        // clear site chooser
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(24, 0, 24, 0) }
+        row.addView(TextView(this).apply { text = "Нейросеть: " })
+        val spinner = android.widget.Spinner(this)
+        spinner.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, chats.map { it.first })
+        val last = getPreferences(MODE_PRIVATE).getString("last", chats[0].second)
+        spinner.setSelection(chats.indexOfFirst { it.second == last }.coerceAtLeast(0), false)
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
+                if (chats[pos].second != getPreferences(MODE_PRIVATE).getString("last", null)) open(chats[pos].second)
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        row.addView(spinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(row)
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(16, 0, 16, 0) }
+        bar.addView(Button(this).apply { text = "Промпт"; isAllCaps = false; setOnClickListener { copyPrompt(); injectPrompt(); arm() } })
         bar.addView(Button(this).apply { text = "Взять картинку"; isAllCaps = false; setOnClickListener { scan(force = true) } })
-        root.addView(HorizontalScrollView(this).apply { addView(bar) })
-        status = TextView(this).apply { setPadding(24, 8, 24, 8); gravity = Gravity.START
-            text = "Выберите чат, войдите (вход запомнится), нажмите «Промпт» и отправьте. Готовая картинка подхватится сама." }
+        root.addView(bar)
+        status = TextView(this).apply { setPadding(24, 4, 24, 8); gravity = Gravity.START
+            text = "Выберите нейросеть, войдите (вход запомнится), модель выберите в меню самого чата. Нажмите «Промпт» и отправьте — картинка из ответа подхватится сама." }
         root.addView(status)
         web = WebView(this)
         root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -95,11 +121,14 @@ class AiBackgroundActivity : Activity() {
         }
         web.setDownloadListener { url, ua, _, _, _ -> if (url.startsWith("data:")) handleDataUrl(url) else fetchNative(url, ua) }
         open(getPreferences(MODE_PRIVATE).getString("last", chats[0].second)!!)
-        web.postDelayed(object : Runnable { override fun run() { if (!isFinishing) { scan(false); web.postDelayed(this, 2500) } } }, 4000)
+        web.postDelayed(object : Runnable { override fun run() { if (!isFinishing) { if (armed) scan(false); web.postDelayed(this, 2500) } } }, 4000)
     }
 
-    private fun open(url: String) { getPreferences(MODE_PRIVATE).edit().putString("last", url).apply(); seen.clear(); web.loadUrl(url)
+    private fun open(url: String) { armed = false; getPreferences(MODE_PRIVATE).edit().putString("last", url).apply(); seen.clear(); web.loadUrl(url)
         web.postDelayed({ scan(false, markOnly = true) }, 3500) }
+
+    /** remember everything visible now (login QR, logos, old answers) so only images of the new answer count */
+    private fun arm() { scan(false, markOnly = true); armed = true }
 
     private fun copyPrompt() {
         (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("prompt", prompt()))
@@ -116,7 +145,12 @@ class AiBackgroundActivity : Activity() {
     /** looks for large images; new ones are fetched inside the page (with its cookies) and passed back as data URL */
     private fun scan(force: Boolean, markOnly: Boolean = false) {
         web.evaluateJavascript("""(function(){var r=[];document.querySelectorAll('img').forEach(function(i){
-            if(i.naturalWidth>=512&&i.naturalHeight>=384)r.push(i.currentSrc||i.src);});return JSON.stringify(r);})()""") { res ->
+            var w=i.naturalWidth,h=i.naturalHeight,s=i.currentSrc||i.src,a=(i.alt||'')+' '+(i.className||'');
+            if(Math.min(w,h)<512)return; if(/qr|avatar|logo|icon|favicon|emoji|sprite|badge|profile|login|captcha/i.test(s.split('?')[0].slice(-120)+' '+a))return;
+            if(i.closest('header,nav,button,[role=dialog],[class*=login],[class*=Login],[class*=qr],[class*=QR],[class*=avatar]'))return;
+            var r2=i.getBoundingClientRect(); if(r2.width<200)return; r.push(s);});
+            var login=!!document.querySelector('input[type=password]')||!document.querySelector('textarea,[contenteditable=true]');
+            return JSON.stringify(login?[]:r);})()""") { res ->
             val arr = try { org.json.JSONArray(org.json.JSONTokener(res).nextValue() as String) } catch (e: Exception) { return@evaluateJavascript }
             val urls = (0 until arr.length()).map { arr.getString(it) }
             if (markOnly) { seen.addAll(urls); return@evaluateJavascript }
@@ -158,6 +192,9 @@ class AiBackgroundActivity : Activity() {
     /** crop to keyboard ratio, scale to screen width, compress, preview */
     private fun process(src: Bitmap?) {
         if (src == null || dialogShown) return
+        if (!ImageChecks.bigEnough(src.width, src.height) || BgFx.looksLikeQr(src)) {
+            status.text = "Пропустил служебную картинку (QR/иконка). Жду картинку из ответа…"; return
+        }
         val (w, h) = ratio()
         val target = w.toFloat() / h
         var cw = src.width; var ch = (cw / target).roundToInt()
@@ -183,9 +220,14 @@ class AiBackgroundActivity : Activity() {
         if (day) f.copyTo(Settings.getCustomBackgroundFile(this, false, false), true)
         if (night) f.copyTo(Settings.getCustomBackgroundFile(this, true, false), true)
         Settings.clearCachedBackgroundImages()
-        KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        try { KeyboardSwitcher.getInstance().setThemeNeedsReload() } catch (e: Exception) { }
+        // the keyboard lives in the main process: tell it to reload (and the cache checks file mtime anyway)
+        sendBroadcast(android.content.Intent(ACTION_BG_CHANGED).setPackage(packageName))
+        armed = false
         Toast.makeText(this, "Фон применён. Размытие и затемнение — в настройках внешнего вида", Toast.LENGTH_LONG).show()
     }
+
+    companion object { const val ACTION_BG_CHANGED = "ru.klaviatura.BG_CHANGED" }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { if (web.canGoBack()) web.goBack() else super.onBackPressed() }

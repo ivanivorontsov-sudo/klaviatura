@@ -502,7 +502,12 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     @Nullable public static Drawable readUserBackgroundImage(final Context context, final boolean night) {
         final boolean landscape = context.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
         final int index = (night ? 1 : 0) + (landscape ? 2 : 0);
-        if (sCachedBackgroundImages[index] != null) return sCachedBackgroundImages[index];
+        // the AI-background screen runs in its own process: detect file changes made there by mtime
+        final File cur = getCustomBackgroundFile(context, night, landscape);
+        final long mt = cur.isFile() ? cur.lastModified() : 0L;
+        if (sCachedBackgroundImages[index] != null && sCachedBackgroundMtime[index] == mt) return sCachedBackgroundImages[index];
+        sCachedBackgroundImages[index] = null;
+        sCachedBackgroundMtime[index] = mt;
 
         File image = getCustomBackgroundFile(context, night, landscape);
         if (!image.isFile() && landscape)
@@ -519,6 +524,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static File getCustomBackgroundFile(final Context context, final boolean night, final boolean landscape) {
         return new File(DeviceProtectedUtils.getFilesDir(context), "custom_background_image" + (landscape ? "_landscape" : "") + (night ? "_night" : ""));
     }
+
+    private static final long[] sCachedBackgroundMtime = new long[4];
 
     public static void clearCachedBackgroundImages() {
         Arrays.fill(sCachedBackgroundImages, null);

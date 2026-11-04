@@ -11,6 +11,36 @@ import kotlin.math.min
 
 /** blur + dim for the keyboard background image (soft, eye-friendly) */
 object BgFx {
+    /** decodes a picked image scaled to about the screen width (respects EXIF rotation on API 28+) */
+    @JvmStatic fun decodeScaled(context: Context, uri: android.net.Uri): Bitmap? = try {
+        val maxW = context.resources.displayMetrics.widthPixels.coerceAtLeast(720)
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            val src = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+            android.graphics.ImageDecoder.decodeBitmap(src) { dec, info, _ ->
+                val w = info.size.width; val h = info.size.height
+                if (w > maxW) dec.setTargetSize(maxW, (h.toLong() * maxW / w).toInt().coerceAtLeast(1))
+                dec.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+            var sample = 1; while (o.outWidth / (sample * 2) >= maxW) sample *= 2
+            context.contentResolver.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            }
+        }
+    } catch (e: Throwable) { null }
+
+    /**
+     * QR codes / login barcodes: almost all pixels are near-black or near-white, both in large amounts,
+     * with many sharp transitions. AI art never looks like that.
+     */
+    @JvmStatic fun looksLikeQr(b: Bitmap): Boolean {
+        val s = Bitmap.createScaledBitmap(b, 64, 64, false)
+        val lum = IntArray(64 * 64) { val c = s.getPixel(it % 64, it / 64); (Color.red(c) * 3 + Color.green(c) * 6 + Color.blue(c)) / 10 }
+        return ImageChecks.qrLike(lum, 64)
+    }
+
     const val PREF_BLUR = "kl_bg_blur"   // 0..25
     const val PREF_DIM = "kl_bg_dim"     // 0..85 %
     const val DEFAULT_DIM = 30

@@ -60,7 +60,7 @@ fun BackgroundImagePref(setting: Setting, isLandscape: Boolean) {
         }
     }
     val intent = IntentUtils.getResolvableTypeIntent(ctx, "image/*")
-        .setAction(Intent.ACTION_OPEN_DOCUMENT)
+        .setAction(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
     Preference(
         name = setting.title,
         onClick = {
@@ -115,15 +115,19 @@ fun BackgroundImagePref(setting: Setting, isLandscape: Boolean) {
 }
 
 private fun setBackgroundImage(ctx: Context, uri: Uri, isNight: Boolean, isLandscape: Boolean): Boolean {
-    val imageFile = Settings.getCustomBackgroundFile(ctx, isNight, isLandscape)
-    FileUtils.copyContentUriToNewFile(uri, ctx, imageFile)
-    KeyboardSwitcher.getInstance().setThemeNeedsReload()
+    // gallery photos are often 12-50 MP or HEIF: copying them raw made decoding fail (OOM) at draw time and the
+    // background silently stayed unchanged. Decode with sampling, scale to the screen and store as JPEG.
+    val bmp = ru.klaviatura.bg.BgFx.decodeScaled(ctx, uri) ?: return false
+    val files = mutableListOf(Settings.getCustomBackgroundFile(ctx, isNight, isLandscape))
+    if (!ctx.prefs().getBoolean(Settings.PREF_THEME_DAY_NIGHT, Defaults.PREF_THEME_DAY_NIGHT))
+        files.add(Settings.getCustomBackgroundFile(ctx, !isNight, isLandscape))
     try {
-        BitmapFactory.decodeFile(imageFile.absolutePath)
+        for (f in files) f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
     } catch (_: Exception) {
-        imageFile.delete()
+        files.forEach { it.delete() }
         return false
     }
     Settings.clearCachedBackgroundImages()
+    KeyboardSwitcher.getInstance().setThemeNeedsReload()
     return true
 }
