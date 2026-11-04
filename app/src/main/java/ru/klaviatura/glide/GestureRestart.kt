@@ -9,8 +9,8 @@ object GestureRestart {
      * Returns the index of the last such hold (start of the new segment) or 0.
      * Double letters are paused on for ~100-300 ms, the default 450 ms stays above that.
      */
-    fun holdStart(xs: IntArray, ys: IntArray, times: IntArray, n: Int, kw: Float, holdMs: Int, still: Float = 0.3f): Int {
-        if (holdMs <= 0 || n < 3) return 0
+    fun holdStart(xs: IntArray, ys: IntArray, times: IntArray, n: Int, kw: Float, holdMs: Int, still: Float = 0.15f): Int {
+        if (holdMs < MIN_HOLD_MS || n < 3) return 0
         var result = 0
         // the touch stack samples by distance, so a still finger may produce NO points: the stillness lasts
         // until the first sample that leaves the window, hence the duration is measured up to that sample
@@ -28,25 +28,30 @@ object GestureRestart {
      * if it fits clearly better (so words like «потоп» are not cut).
      */
     fun returnStarts(xs: IntArray, ys: IntArray, n: Int, kw: Float): List<Int> {
-        if (n < 6) return emptyList()
+        // 1.3.1: much more conservative — only a clear retrace back onto the first key after a long path
+        if (n < 12) return emptyList()
         val out = ArrayList<Int>()
-        var left = false
+        var left = false; var travelled = 0f
         for (i in 1 until n - 2) {
-            if (!left && d(xs, ys, 0, i) > 2f * kw) left = true
-            if (left && d(xs, ys, 0, i) < 0.6f * kw) {
+            travelled += d(xs, ys, i - 1, i)
+            if (!left && d(xs, ys, 0, i) > 3f * kw && travelled > 5f * kw) left = true
+            if (left && d(xs, ys, 0, i) < 0.4f * kw) {
                 // reversal: incoming and outgoing directions point opposite-ish
                 val j = maxOf(0, i - 3); val k = minOf(n - 1, i + 3)
                 val ax = (xs[i] - xs[j]).toFloat(); val ay = (ys[i] - ys[j]).toFloat()
                 val bx = (xs[k] - xs[i]).toFloat(); val by = (ys[k] - ys[i]).toFloat()
                 val la = sqrt(ax * ax + ay * ay); val lb = sqrt(bx * bx + by * by)
-                if (la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) < 0.3f) { out.add(i); left = false }
+                if (la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) < -0.2f) { out.add(i); left = false; travelled = 0f }
             }
         }
         return out
     }
 
     /** cost margin the segment decode must win by */
-    const val SEGMENT_MARGIN = 0.8
+    const val SEGMENT_MARGIN = 1.4
+    /** below this the restart is off (slider «Выкл») */
+    const val MIN_HOLD_MS = 500
+    const val DEFAULT_HOLD_MS = 1000
 
     private fun d(xs: IntArray, ys: IntArray, a: Int, b: Int): Float {
         val dx = (xs[a] - xs[b]).toFloat(); val dy = (ys[a] - ys[b]).toFloat(); return sqrt(dx * dx + dy * dy)

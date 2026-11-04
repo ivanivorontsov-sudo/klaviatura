@@ -33,7 +33,7 @@ class ProfanityTest {
         for (w in listOf("попка", "хуй", "пиздец", "блядь", "ебать", "жопа", "дерьмо", "fuck", "shit")) assertTrue(w, Profanity.blocks(w))
         for (w in listOf("пока", "поки", "употребить", "ребёнок", "ребенок", "себя", "хлеба", "небо", "оскорблять", "писать",
                 "сучок", "скука", "команда", "трахея", "мандарин", "анализ", "корабль", "сосиска", "художник", "попкорн",
-                "порка", "копируются", "класс", "cocktail", "pass", "assume", "analysis"))
+                "порка", "копируются", "класс", "пенистый", "сучковатый", "дрочёна", "cocktail", "pass", "assume", "analysis"))
             assertFalse(w, Profanity.blocks(w))
     }
 
@@ -72,6 +72,25 @@ class ProfanityTest {
             for (s in 0 until 3) if (decode(w, s).take(3).contains(w)) top3++
             assertTrue("$w top3 $top3/3 ${decode(w, 0).take(5)}", top3 >= 2)
         }
+    }
+
+    @Test fun yoWritten() {
+        val m = ru.klaviatura.text.Yo.parse(asset("ru_yo.txt").readLines().asSequence())
+        assertEquals("ещё", m["еще"]); assertEquals("её", m["ее"]); assertEquals("чёрный", m["черный"])
+        assertFalse("все is ambiguous", m.containsKey("все")); assertFalse(m.containsKey("небо"))
+        ru.klaviatura.text.Yo.map = m; ru.klaviatura.text.Yo.enabled = true
+        assertEquals("Ещё,", ru.klaviatura.text.Yo.fix("Еще,")); assertEquals("пока", ru.klaviatura.text.Yo.fix("пока"))
+        ru.klaviatura.text.Yo.enabled = false
+        assertEquals("еще", ru.klaviatura.text.Yo.fix("ещё"))
+        ru.klaviatura.text.Yo.enabled = true
+        val lex = GlideDecoderTest.ru
+        assertTrue(lex.contains("ещё")); assertFalse("е-spelling merged into ё", lex.contains("еще")); assertTrue(lex.contains("все") && lex.contains("всё"))
+        assertEquals("ещё", decode("еще").first())
+    }
+
+    @Test fun byteLexiconRoundTrip() {
+        val l = ru.klaviatura.glide.Lexicon.parse("x", sequenceOf("ёлка\t5", "Москва\t3", "hello\t2", "café\t1"))
+        assertEquals(listOf("ёлка", "Москва", "hello"), l.words.toList()); assertTrue(l.contains("ёлка")); assertFalse(l.contains("елка"))
     }
 
     @Test fun screenshotPaths() {

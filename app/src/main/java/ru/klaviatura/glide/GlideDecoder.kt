@@ -17,7 +17,7 @@ data class GKey(val ch: Char, val cx: Float, val cy: Float, val w: Float, val h:
  * 843k RU forms take ~25 MB instead of ~160 MB with String/HashMap/boxed lists (that OOM'd the IME).
  */
 class Lexicon(val lang: String) {
-    private var buf = CharArray(1 shl 16); private var bufLen = 0
+    private var buf = ByteArray(1 shl 16); private var bufLen = 0
     private var off = IntArray(1024); private var lf = FloatArray(1024)
     var size = 0; private set
     private var table = IntArray(2048) { -1 }
@@ -35,14 +35,14 @@ class Lexicon(val lang: String) {
     val logf: FloatArray get() = lf
     val byFirst: Map<Char, IntList> get() = firstLists
 
-    fun word(i: Int) = String(buf, off[i], len(i))
-    fun firstChar(i: Int) = buf[off[i]]
+    fun word(i: Int): String { val o = off[i]; val l = len(i); return String(CharArray(l) { dec(buf[o + it]) }) }
+    fun firstChar(i: Int) = dec(buf[off[i]])
     private fun len(i: Int) = (if (i + 1 < size) off[i + 1] else bufLen) - off[i]
 
     private fun hash(w: CharSequence): Int { var h = 0; for (c in w) h = h * 31 + c.code; return h and 0x7fffffff }
     private fun eq(i: Int, w: CharSequence): Boolean {
         val l = len(i); if (l != w.length) return false
-        val o = off[i]; for (k in 0 until l) if (buf[o + k] != w[k]) return false; return true
+        val o = off[i]; for (k in 0 until l) if (buf[o + k] != enc(w[k])) return false; return true
     }
     private fun find(w: CharSequence): Int {
         val m = table.size - 1; var p = hash(w) and m
@@ -55,18 +55,18 @@ class Lexicon(val lang: String) {
     }
     private fun grow() {
         val t = IntArray(table.size * 2) { -1 }; table = t
-        for (i in 0 until size) put(i, String(buf, off[i], len(i)))
+        for (i in 0 until size) put(i, word(i))
     }
 
     fun contains(w: String) = find(w) >= 0
     fun indexOf(w: String) = find(w)
 
     fun add(word: String, count: Long) {
-        if (word.isEmpty() || find(word) >= 0) return
+        if (word.isEmpty() || word.any { enc(it) == BAD } || find(word) >= 0) return
         val i = size
         if (i + 1 >= off.size) { off = off.copyOf(off.size * 2); lf = lf.copyOf(lf.size * 2) }
         while (bufLen + word.length > buf.size) buf = buf.copyOf(buf.size * 2)
-        word.toCharArray(buf, bufLen); off[i] = bufLen; bufLen += word.length
+        for (k in word.indices) buf[bufLen + k] = enc(word[k]); off[i] = bufLen; bufLen += word.length
         val l = ln(1.0 + count).toFloat(); lf[i] = l; maxLog = max(maxLog, l)
         size++
         if (size * 2 > table.size) grow() else put(i, word)
@@ -78,6 +78,18 @@ class Lexicon(val lang: String) {
         firstLists.values.forEach { it.a = it.a.copyOf(it.n) } }
 
     companion object {
+        /** 1 byte per letter (cp1251-like): halves the memory of the 1.36M-form Russian lexicon */
+        const val BAD: Byte = 0x7F
+        fun enc(c: Char): Byte = when {
+            c.code < 0x7F -> c.code.toByte()
+            c in 'а'..'я' -> (0xE0 + (c - 'а')).toByte()
+            c in 'А'..'Я' -> (0xC0 + (c - 'А')).toByte()
+            c == 'ё' -> 0xB8.toByte(); c == 'Ё' -> 0xA8.toByte()
+            else -> BAD
+        }
+        fun dec(b: Byte): Char { val v = b.toInt() and 0xFF; return when {
+            v < 0x7F -> v.toChar(); v >= 0xE0 -> 'а' + (v - 0xE0); v >= 0xC0 -> 'А' + (v - 0xC0)
+            v == 0xB8 -> 'ё'; v == 0xA8 -> 'Ё'; else -> '?' } }
         fun parse(lang: String, lines: Sequence<String>): Lexicon {
             val lex = Lexicon(lang)
             for (line in lines) {

@@ -52,6 +52,21 @@ class GestureRestartTest {
         println("[restart] hold -> $top"); assertEquals("мышка", top)
     }
 
+    @Test fun shortPauseAndWobbleAreNotRestart() {
+        // 600 ms pause (below the 1 s default) and a slow wobbly finger must not restart
+        val (xs, ys, ts) = timed("привет", 3, 600)
+        assertEquals(0, GestureRestart.holdStart(xs, ys, ts, xs.size, kw, GestureRestart.DEFAULT_HOLD_MS))
+        assertEquals(0, GestureRestart.holdStart(xs, ys, ts, xs.size, kw, 0)) // Off
+        for (w in listOf("привет", "пока", "спасибо", "хорошо"))
+            for (s in 0 until 3) { val (x, y) = path(noisyPoints(jcuken, w, Random(s)))
+                assertTrue("$w/$s no return-restart", GestureRestart.returnStarts(x, y, x.size, kw).isEmpty()) }
+    }
+
+    @Test fun longHoldStillRestartsAtDefault() {
+        val (xs, ys, ts) = concat(timed("кошкм", 4, 1200), timed("мышка", seed = 2))
+        assertTrue(GestureRestart.holdStart(xs, ys, ts, xs.size, kw, GestureRestart.DEFAULT_HOLD_MS) > 0)
+    }
+
     @Test fun doubleLetterPauseIsNotRestart() {
         for ((w, i) in listOf("класс" to 3, "ванна" to 2, "суббота" to 2, "программа" to 4)) {
             val (xs, ys, ts) = timed(w, i, 250)
@@ -63,7 +78,7 @@ class GestureRestartTest {
         val ru = lex("ru"); val d = GlideDecoder(jcuken)
         // started «привет», went back to «п» and swiped «пока»
         // started «приве…», went back to «п» and swiped «пока» in one continuous gesture
-        val (xs, ys) = path(noisyPoints(jcuken, "привепока", Random(3)))
+        val (xs, ys) = path(noisyPoints(jcuken, "пожалуйстапока", Random(3)))
         val full = d.decode(xs, ys, xs.size, listOf(ru to 0.0))
         val starts = GestureRestart.returnStarts(xs, ys, xs.size, kw)
         assertTrue("restart candidates", starts.isNotEmpty())

@@ -63,6 +63,7 @@ fun PreferencesScreen(
         Settings.PREF_SAVE_SUBTYPE_PER_APP,
         Settings.PREF_SHOW_EMOJI_DESCRIPTIONS,
         ru.klaviatura.text.Profanity.PREF,
+        ru.klaviatura.text.Yo.PREF,
         R.string.settings_category_additional_keys,
         Settings.PREF_SHOW_NUMBER_ROW,
         if (SubtypeSettings.getEnabledSubtypes(true).any { it.locale().language in localesWithLocalizedNumberRow })
@@ -200,6 +201,9 @@ fun createPreferencesSettings(context: Context) = listOf(
     },
     Setting(context, ru.klaviatura.text.Profanity.PREF, R.string.kl_block_profanity, R.string.kl_block_profanity_summary) {
         SwitchPreference(it, true) { ru.klaviatura.text.Profanity.enabled = it }
+    },
+    Setting(context, ru.klaviatura.text.Yo.PREF, R.string.kl_write_yo, R.string.kl_write_yo_summary) {
+        SwitchPreference(it, true) { ru.klaviatura.text.Yo.enabled = it }
     },
     Setting(context, ru.klaviatura.clip.Screenshots.PREF, R.string.kl_clip_screenshots, R.string.kl_clip_screenshots_summary) {
         val ctx = LocalContext.current

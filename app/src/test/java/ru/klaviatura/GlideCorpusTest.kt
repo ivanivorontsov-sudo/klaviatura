@@ -28,7 +28,10 @@ class GlideCorpusTest {
             "шпаргалка", "ухабистый", "эскимо",
             // modern / slang / loanwords (1.2.2)
             "свайпом", "свайпнуть", "скриншотом", "смартфоне", "гитхабе", "браузере", "апдейтов", "чатике",
-            "лайкнула", "загуглил", "стримы", "сторис", "кринжово", "дедлайна", "созвонимся")
+            "лайкнула", "загуглил", "стримы", "сторис", "кринжово", "дедлайна", "созвонимся",
+            // 1.3.1: expanded lexicon (full OpenCorpora paradigms, IT jargon, professional terms)
+            "растревожили", "копируются", "задеплоить", "закоммитил", "запушила", "прокуратуры", "апелляционной",
+            "ходатайство", "томографии", "амортизация", "рентабельности", "катализатора", "митохондрии")
         val EN = listOf("wonderful", "keyboards", "happened", "beautifully", "tomorrow", "yesterday", "anything",
             "remember", "different", "questions", "something", "together", "everyone", "probably",
             "thoughtful", "squirrel", "rhythm", "jealousy", "quickly", "excited")
@@ -67,6 +70,17 @@ class GlideCorpusTest {
         val (e1, e3) = run(qwerty, EN, listOf(en to 0.0, ru to 0.3), "EN")
         println("[corpus] TOTAL top1=${"%.1f".format(100 * (r1 * RU.size + e1 * EN.size) / (RU.size + EN.size))}% top3=${"%.1f".format(100 * (r3 * RU.size + e3 * EN.size) / (RU.size + EN.size))}%")
         assertTrue("min threshold", System.getProperty("kl.bench") != null || r3 >= 0.80)
+    }
+
+    /** 200 random rare inflected forms (lowest frequency) from the lexicon: coverage + accuracy report */
+    @Test fun rareFormsSample() {
+        val ru = lex("ru")
+        val rnd = Random(1311)
+        val rare = (0 until ru.size).filter { ru.logf[it] < 0.8f && ru.word(it).length in 6..14 && ru.word(it).all { c -> c in 'а'..'я' } }
+        val sample = List(200) { rare[rnd.nextInt(rare.size)] }.map { ru.word(it) }
+        val (r1, r3) = run(jcuken, sample, listOf(ru to 0.0), "RARE")
+        println("[rare] pool=${rare.size} lexicon=${ru.size} top1=${"%.1f".format(r1 * 100)}% top3=${"%.1f".format(r3 * 100)}%")
+        assertTrue("rare forms usable", r3 >= 0.5)
     }
 
     @Test fun oovGuessFollowsLetters() {

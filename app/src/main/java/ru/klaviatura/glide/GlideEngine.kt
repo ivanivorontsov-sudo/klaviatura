@@ -37,6 +37,7 @@ object GlideEngine : GlideLearning {
         appContext = context.applicationContext
         ru.klaviatura.emoji.EmojiSuggest.init(context)
         ru.klaviatura.text.Profanity.init(context)
+        ru.klaviatura.text.Yo.init(context)
         thread(name = "kl-glide-load") {
             for (lang in listOf("ru", "en")) { try { loadLexicon(lang); loadLm(lang) } catch (e: Throwable) { } }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
@@ -45,7 +46,7 @@ object GlideEngine : GlideLearning {
     }
 
     const val PREF_HOLD_MS = "kl_swipe_hold_restart_ms"
-    @Volatile var holdMs = 450
+    @Volatile var holdMs = GestureRestart.DEFAULT_HOLD_MS
     /** called (on the gesture thread) when a hold restart happens: haptic / trail flash */
     @Volatile var onRestart: (() -> Unit)? = null
     private var lastLoopStart = 0
@@ -90,7 +91,7 @@ object GlideEngine : GlideLearning {
     fun predictions(ngram: NgramContext): List<SuggestedWordInfo> {
         val prev = ngram.getNthPrevWord(1)?.toString() ?: return emptyList()
         return predictNext(prev, 3).mapIndexed { i, w ->
-            SuggestedWordInfo(ProperNouns.case(w), "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ru.klaviatura.text.Yo.fix(ProperNouns.case(w)), "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 
@@ -109,7 +110,7 @@ object GlideEngine : GlideLearning {
         val p = data.mInputPointers
         val prevRaw = ngram.getNthPrevWord(1)?.toString()
         val prev = prevRaw?.lowercase()
-        holdMs = appContext?.let { it.prefs().getInt(PREF_HOLD_MS, 450) } ?: 450
+        holdMs = appContext?.let { it.prefs().getInt(PREF_HOLD_MS, GestureRestart.DEFAULT_HOLD_MS) } ?: GestureRestart.DEFAULT_HOLD_MS
         if (p.pointerSize < 8) lastLoopStart = 0
         var xs = p.xCoordinates; var ys = p.yCoordinates; var n = p.pointerSize
         // (a) hold-to-restart: drop everything before the last long still point
@@ -120,7 +121,7 @@ object GlideEngine : GlideLearning {
         } else lastHoldStart = 0
         var res = decoder.decode(xs, ys, n, lex, this, prev)
         // (b) returned to the start and went again: decode the latest segment, keep it only if clearly better
-        for (st in GestureRestart.returnStarts(xs, ys, n, decoder.kw).asReversed()) {
+        for (st in (if (holdMs >= GestureRestart.MIN_HOLD_MS) GestureRestart.returnStarts(xs, ys, n, decoder.kw) else emptyList()).asReversed()) {
             val seg = decoder.decode(xs.copyOfRange(st, n), ys.copyOfRange(st, n), n - st, lex, this, prev)
             if (seg.isNotEmpty() && (res.isEmpty() || seg[0].cost < res[0].cost - GestureRestart.SEGMENT_MARGIN)) {
                 if (st != lastLoopStart) { lastLoopStart = st; onRestart?.invoke() }
@@ -135,7 +136,7 @@ object GlideEngine : GlideLearning {
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION
-            SuggestedWordInfo(ProperNouns.case(c.word, prevRaw), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ru.klaviatura.text.Yo.fix(ProperNouns.case(c.word, prevRaw)), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 
@@ -148,7 +149,7 @@ object GlideEngine : GlideLearning {
 
     /** called for every committed word (typed, swiped or picked from suggestions) */
     fun learn(rawWord: String, ngram: NgramContext) {
-        val word = rawWord.lowercase()
+        val word = rawWord.lowercase().let { ru.klaviatura.text.Yo.map[it] ?: it }
         if (word.isEmpty() || word.any { !Character.isLetter(it) && it != '\'' && it != '-' }) return
         if (ru.klaviatura.text.Profanity.blocks(word)) return // learned only when the filter is off
         forgotten.remove(word)

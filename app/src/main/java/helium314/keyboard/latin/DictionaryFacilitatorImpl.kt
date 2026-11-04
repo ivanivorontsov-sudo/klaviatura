@@ -493,6 +493,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             res.addAll(own)
             res.mRawSuggestions?.addAll(own)
             res.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
+            yoFix(res)
             own.firstOrNull()?.let { top -> try {
                 res.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(top.mWord, dictionaryGroups.map { it.locale.language }, res.map { it.mScore }))
             } catch (e: Throwable) { } }
@@ -533,7 +534,19 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         } catch (e: Throwable) { }
 
         suggestionResults.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
+        yoFix(suggestionResults)
         return suggestionResults
+    }
+
+    /** «Писать ё»: replace е-spellings by their ё-form (dedup: TreeSet keeps the better score) */
+    private fun yoFix(res: SuggestionResults) {
+        try {
+            val changed = res.filter { ru.klaviatura.text.Yo.info(it) !== it }
+            if (changed.isEmpty()) return
+            res.removeAll(changed.toSet())
+            val have = res.map { it.mWord }.toHashSet()
+            res.addAll(changed.map { ru.klaviatura.text.Yo.info(it) }.filter { it.mWord !in have })
+        } catch (e: Throwable) { }
     }
 
     private fun getSuggestions(

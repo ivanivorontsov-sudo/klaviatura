@@ -100,10 +100,10 @@ fun createGestureTypingSettings(context: Context) = listOf(
         SliderPreference(
             name = def.title,
             key = def.key,
-            default = 450,
-            range = 0f..1000f,
+            default = ru.klaviatura.glide.GestureRestart.DEFAULT_HOLD_MS,
+            range = 400f..2000f,
             description = {
-                if (it <= 0) stringResource(R.string.kl_swipe_hold_restart_off)
+                if (it < ru.klaviatura.glide.GestureRestart.MIN_HOLD_MS) stringResource(R.string.kl_swipe_hold_restart_off)
                 else stringResource(R.string.abbreviation_unit_milliseconds, it.toString())
             }
         )
