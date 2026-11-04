@@ -41,7 +41,10 @@ object GestureRestart {
                 val ax = (xs[i] - xs[j]).toFloat(); val ay = (ys[i] - ys[j]).toFloat()
                 val bx = (xs[k] - xs[i]).toFloat(); val by = (ys[k] - ys[i]).toFloat()
                 val la = sqrt(ax * ax + ay * ay); val lb = sqrt(bx * bx + by * by)
-                if (la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) < -0.2f) { out.add(i); left = false; travelled = 0f }
+                if (la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) < -0.2f) {
+                    // start the new segment at the point closest to the first key
+                    var b = i; for (m in i + 1..minOf(n - 1, i + 6)) if (d(xs, ys, 0, m) < d(xs, ys, 0, b)) b = m
+                    out.add(b); left = false; travelled = 0f }
             }
         }
         return out
