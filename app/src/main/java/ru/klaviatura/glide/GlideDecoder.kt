@@ -115,6 +115,25 @@ class GlideDecoder(val keys: List<GKey>) {
         return -1
     }
 
+    /** out-of-vocabulary fallback: letters under the start, every clear turn and the end of the path */
+    fun rawGuess(rawX: IntArray, rawY: IntArray, n: Int): String? {
+        if (n < 2 || keys.isEmpty()) return null
+        val (xs, ys) = trim(FloatArray(n) { rawX[it].toFloat() }, FloatArray(n) { rawY[it].toFloat() }) ?: return null
+        val (px, py) = resample(xs, ys, N)
+        fun near(x: Float, y: Float) = keys.minByOrNull { dist(x, y, it.cx, it.cy) }!!.ch
+        val sb = StringBuilder().append(near(px[0], py[0]))
+        val step = maxOf(1, (N * kw * 0.5f / maxOf(length(xs, ys), 1f)).toInt())
+        for (i in step until N - step) {
+            val ax = px[i] - px[i - step]; val ay = py[i] - py[i - step]
+            val bx = px[i + step] - px[i]; val by = py[i + step] - py[i]
+            val la = sqrt(ax * ax + ay * ay); val lb = sqrt(bx * bx + by * by)
+            if (la < 1e-3f || lb < 1e-3f) continue
+            if ((ax * bx + ay * by) / (la * lb) < 0.5f) { val c = near(px[i], py[i]); if (sb.last() != c) sb.append(c) }
+        }
+        val e = near(px[N - 1], py[N - 1]); if (sb.last() != e || sb.length == 1) sb.append(e)
+        return sb.toString().takeIf { it.length >= 2 }
+    }
+
     fun decode(
         rawX: IntArray, rawY: IntArray, n: Int,
         lexicons: List<Pair<Lexicon, Double>>, // lexicon and language penalty (0 = current layout language)

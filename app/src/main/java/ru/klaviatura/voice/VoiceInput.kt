@@ -54,14 +54,18 @@ object VoiceInput {
 
     /** short label for the mic key */
     fun label(): String {
-        progress[currentLang()]?.let { return if (it < 0) "распак." else "$it%" }
+        progress[engineKey(currentLang())]?.let { return if (it < 0) "распак." else "$it%" }
         val l = currentLang().uppercase()
         return if (mixed()) "$l+${secondLang(currentLang()).uppercase()}" else l
     }
 
     fun modelDir(lang: String) = File(ctx!!.filesDir, "vosk/$lang")
-    fun hasModel(lang: String) = ModelDownloader.isModelDir(modelDir(lang))
+    fun hasModel(lang: String) = if (ModelDownloader.FILE_MODELS.containsKey(lang)) ModelDownloader.isFileModelDir(lang, modelDir(lang))
+        else ModelDownloader.isModelDir(modelDir(lang))
     fun supported(lang: String) = ModelDownloader.MIRRORS.containsKey(lang)
+    /** engine for Russian: "zip" = sherpa-onnx Zipformer (default since 1.2.2, faster/better on modern words), "vosk" = Vosk Kaldi */
+    const val PREF_ENGINE_VOSK = "kl_voice_engine_vosk"
+    fun engineKey(lang: String) = if (lang == "ru" && ctx?.prefs()?.getBoolean(PREF_ENGINE_VOSK, false) != true) ModelDownloader.ZIP_RU else lang
 
     fun toggle(t: VoiceTarget) { if (listening) stop() else start(t) }
 
@@ -80,7 +84,7 @@ object VoiceInput {
         target = t
         val lang = currentLang()
         if (!supported(lang)) { toast("Голос для языка «$lang» пока не поддерживается"); return }
-        val langs = if (mixed()) listOf(lang, secondLang(lang)) else listOf(lang)
+        val langs = (if (mixed()) listOf(lang, secondLang(lang)) else listOf(lang)).map { engineKey(it) }
         // ROOT CAUSE FIX (1.2.0): earlier the mic permission was checked first and the method returned,
         // so on first use the download never started (the permission screen just closed). Now the model
         // download starts immediately, independent of the mic permission.
@@ -113,7 +117,7 @@ object VoiceInput {
             try {
                 modelDir(lang).parentFile?.mkdirs()
                 var lastPct = -1; var lastT = 0L
-                ModelDownloader.download(lang, modelDir(lang), object : ModelDownloader.Listener {
+                val listener = object : ModelDownloader.Listener {
                     override fun onProgress(done: Long, total: Long, mirror: Int) {
                         val pct = if (total > 0) (done * 100 / total).toInt() else 0
                         val now = System.currentTimeMillis()
@@ -121,7 +125,9 @@ object VoiceInput {
                     }
                     override fun onUnzip() { progress[lang] = -1; n.unzipping(); refresh() }
                     override fun onMirrorFailed(url: String, error: String) { android.util.Log.w("KlVoice", "mirror failed $url: $error") }
-                })
+                }
+                if (ModelDownloader.FILE_MODELS.containsKey(lang)) ModelDownloader.downloadFiles(lang, modelDir(lang), listener)
+                else ModelDownloader.download(lang, modelDir(lang), listener)
                 n.done()
                 toast("Модель голоса «$lang» готова — нажмите микрофон")
             } catch (e: Exception) {
@@ -141,6 +147,39 @@ object VoiceInput {
     /** microphone level 0..1 for the recording indicator */
     @Volatile var level = 0f; private set
     fun statusText() = if (listening) "Слушаю… (${currentLang().uppercase()})" else ""
+
+    private fun asr(key: String, rate: Float): Asr =
+        if (key == ModelDownloader.ZIP_RU) SherpaAsr(sherpa(key), rate.toInt()) else VoskAsr(model(key), rate)
+
+    private val sherpaLoaded = HashMap<String, com.k2fsa.sherpa.onnx.OnlineRecognizer>()
+    private fun sherpa(key: String) = synchronized(sherpaLoaded) { sherpaLoaded.getOrPut(key) {
+        val d = modelDir(key).absolutePath
+        com.k2fsa.sherpa.onnx.OnlineRecognizer(null, com.k2fsa.sherpa.onnx.OnlineRecognizerConfig(
+            featConfig = com.k2fsa.sherpa.onnx.FeatureConfig(sampleRate = 16000, featureDim = 80),
+            modelConfig = com.k2fsa.sherpa.onnx.OnlineModelConfig(
+                transducer = com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig("$d/encoder.int8.onnx", "$d/decoder.onnx", "$d/joiner.int8.onnx"),
+                tokens = "$d/tokens.txt", numThreads = 2, modelType = "zipformer2"),
+            endpointConfig = com.k2fsa.sherpa.onnx.EndpointConfig(),
+            enableEndpoint = true, decodingMethod = "greedy_search"))
+    } }
+
+    /** adapter: sherpa-onnx streaming recognizer -> the Vosk-style JSON interface VoiceSession uses */
+    private class SherpaAsr(val r: com.k2fsa.sherpa.onnx.OnlineRecognizer, val rate: Int) : Asr {
+        val s = r.createStream("")
+        private val f = FloatArray(4096)
+        override fun accept(buf: ShortArray, n: Int): Boolean {
+            val a = if (n <= f.size) f else FloatArray(n)
+            for (i in 0 until n) a[i] = buf[i] / 32768f
+            s.acceptWaveform(if (a.size == n) a else a.copyOf(n), rate)
+            while (r.isReady(s)) r.decode(s)
+            return r.isEndpoint(s)
+        }
+        private fun js(k: String, t: String) = org.json.JSONObject().put(k, VoiceText.dehyphenNumbers(t.lowercase())).toString()
+        override fun partial() = js("partial", r.getResult(s).text)
+        override fun result(): String { val t = r.getResult(s).text; r.reset(s); return js("text", t) }
+        override fun final(): String { s.inputFinished(); while (r.isReady(s)) r.decode(s); val t = r.getResult(s).text; r.reset(s); return js("text", t) }
+        override fun close() = s.release()
+    }
 
     private class VoskAsr(m: Model, rate: Float) : Asr {
         val r = Recognizer(m, rate).apply { setWords(true) }
@@ -181,16 +220,17 @@ object VoiceInput {
             // the recognizer gets the REAL rate of the recorder (Vosk resamples if it differs from 16 kHz)
             val rate = rec.sampleRate.toFloat()
             val commands = ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false
-            session = VoiceSession(initial.map { it to (VoskAsr(model(it), rate) as Asr) }, out, commands)
+            session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands)
             rec.startRecording()
             val buf = ShortArray(1600) // 100 ms
             var lastUi = 0L
             while (!stopRequested) {
                 restartLang?.let { nl ->
                     restartLang = null
-                    if (!hasModel(nl)) { download(nl); stopRequested = true; return@let }
-                    val langs = if (mixed()) listOf(nl, secondLang(nl)).filter { hasModel(it) } else listOf(nl)
-                    session.replace(langs.map { it to (VoskAsr(model(it), rate) as Asr) })
+                    val k = engineKey(nl)
+                    if (!hasModel(k)) { download(k); stopRequested = true; return@let }
+                    val langs = if (mixed()) listOf(k, engineKey(secondLang(nl))).filter { hasModel(it) } else listOf(k)
+                    session.replace(langs.map { it to asr(it, rate) })
                 }
                 if (stopRequested) break
                 val n = rec.read(buf, 0, buf.size)

@@ -13,8 +13,8 @@ android {
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 5
-        versionName = "1.2.1"
+        versionCode = 6
+        versionName = "1.2.2"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))
@@ -122,7 +122,17 @@ android {
     }
 }
 
+// sherpa-onnx (Apache-2.0) Android AAR, downloaded at build time (not committed; ~49 MB, only arm64 is packaged)
+val sherpaVersion = "2.0.1"
+val sherpaAar = rootProject.file("libs-dl/sherpa-onnx-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    uri("https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/sherpa-onnx-$sherpaVersion.aar").toURL()
+        .openStream().use { inp -> sherpaAar.outputStream().use { inp.copyTo(it) } }
+}
+
 dependencies {
+    implementation(files(sherpaAar))
     // offline voice (Apache-2.0)
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")

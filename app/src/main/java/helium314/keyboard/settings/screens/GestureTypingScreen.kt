@@ -45,6 +45,7 @@ fun GestureTypingScreen(
         ru.klaviatura.voice.VoiceInput.PREF_MIXED,
         "kl_voice_import",
         ru.klaviatura.voice.VoiceInput.PREF_COMMANDS,
+        ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK,
         if (gestureEnabled)
             Settings.PREF_GESTURE_PREVIEW_TRAIL else null,
         if (gestureEnabled)
@@ -93,6 +94,9 @@ fun createGestureTypingSettings(context: Context) = listOf(
         helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
             ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.voice.ModelImportActivity::class.java))
         })
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK, R.string.kl_voice_engine_vosk, R.string.kl_voice_engine_vosk_summary) {
+        SwitchPreference(it, false)
     },
     Setting(context, ru.klaviatura.voice.VoiceInput.PREF_COMMANDS, R.string.kl_voice_commands, R.string.kl_voice_commands_summary) {
         SwitchPreference(it, true)

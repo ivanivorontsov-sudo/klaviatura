@@ -69,8 +69,11 @@ object GlideEngine : GlideLearning {
         val p = data.mInputPointers
         val prev = ngram.getNthPrevWord(1)?.toString()?.lowercase()
         val res = decoder.decode(p.xCoordinates, p.yCoordinates, p.pointerSize, lex, this, prev)
-        lastDecoder = decoder; lastCandidates = res
-        return res.mapIndexed { i, c ->
+        val guess = decoder.rawGuess(p.xCoordinates, p.yCoordinates, p.pointerSize)
+        val all = if (guess != null && res.none { it.word == guess })
+            res.toMutableList().apply { add(minOf(3, size), GlideCandidate(guess, main, (res.getOrNull(minOf(3, size) - 1)?.cost ?: 0.0) + 0.01, false)) } else res
+        lastDecoder = decoder; lastCandidates = all // picking the guess teaches the word (see learn)
+        return all.mapIndexed { i, c ->
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION

@@ -72,7 +72,7 @@ class VoiceSession(
         val words = best
         if (words == null) { if (lastPartial.isNotEmpty()) { lastPartial = ""; out.partial("") }; return false }
         lastSpeechAt = System.currentTimeMillis()
-        val text = VoiceText.format(words.joinToString(" "), bestLang, commands)
+        val text = VoiceText.format(words.joinToString(" "), bestLang.substringBefore('-'), commands)
         lastPartial = ""
         if (text.isNotEmpty()) out.commit(text) else out.partial("")
         return true
@@ -82,6 +82,11 @@ class VoiceSession(
 }
 
 object VoiceText {
+    private val NUM = setOf("ноль","один","одна","два","две","три","четыре","пять","шесть","семь","восемь","девять","десять")
+    /** Zipformer writes «один-два три-четыре»: split hyphens only between number words */
+    fun dehyphenNumbers(t: String) = t.replace(Regex("(\\p{L}+)-(\\p{L}+)")) { m ->
+        if (m.groupValues[1] in NUM && m.groupValues[2] in NUM) "${m.groupValues[1]} ${m.groupValues[2]}" else m.value }
+
     /** keeps only words in the script of the language, collapses repetitions, applies spoken punctuation */
     fun format(raw: String, lang: String, commands: Boolean): String {
         val cyr = lang in setOf("ru", "uk", "be", "bg", "sr")

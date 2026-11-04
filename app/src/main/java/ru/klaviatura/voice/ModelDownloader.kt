@@ -21,6 +21,45 @@ object ModelDownloader {
             "https://huggingface.co/rhasspy/vosk-models/resolve/main/en/vosk-model-small-en-us-0.15.zip"),
     )
 
+    /** sherpa-onnx streaming Zipformer (Vosk small-streaming-ru, Apache-2.0), int8, ~29 MB: plain files, no zip */
+    const val ZIP_RU = "ru-z"
+    val FILE_MODELS: Map<String, Pair<List<String>, List<String>>> = mapOf(
+        ZIP_RU to (listOf(
+            "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/",
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/")
+            to listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")))
+
+    fun isFileModelDir(lang: String, dir: File) = FILE_MODELS[lang]?.second?.all { File(dir, it).isFile } == true
+
+    /** downloads every file of a [FILE_MODELS] model, progress over the sum of all files */
+    fun downloadFiles(lang: String, dest: File, l: Listener) {
+        val (bases, files) = FILE_MODELS[lang] ?: throw IOException("нет модели $lang")
+        val errors = ArrayList<String>()
+        val tmp = File(dest.parentFile, dest.name + ".part"); 
+        for ((i, base) in bases.withIndex()) {
+            try {
+                tmp.deleteRecursively(); tmp.mkdirs()
+                val conns = files.map { open(base + it) }
+                val total = conns.sumOf { it.contentLengthLong.coerceAtLeast(0) }
+                var done = 0L
+                for ((f, c) in files.zip(conns)) {
+                    val exp = c.contentLengthLong; var got = 0L
+                    c.inputStream.use { inp -> File(tmp, f).outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) { val r = inp.read(buf); if (r < 0) break; out.write(buf, 0, r); got += r; done += r; l.onProgress(done, total, i) }
+                    } }
+                    if (exp > 0 && got != exp) throw IOException("загрузка оборвалась ($f)")
+                }
+                dest.deleteRecursively()
+                if (!tmp.renameTo(dest)) { tmp.copyRecursively(dest, true); tmp.deleteRecursively() }
+                return
+            } catch (e: Exception) {
+                tmp.deleteRecursively(); val msg = humanError(e); errors.add("${URL(base).host}: $msg"); l.onMirrorFailed(base, msg)
+            }
+        }
+        throw IOException(errors.joinToString("; "))
+    }
+
     interface Listener {
         fun onProgress(done: Long, total: Long, mirror: Int) {}
         fun onUnzip() {}

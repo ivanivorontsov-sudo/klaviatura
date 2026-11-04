@@ -25,7 +25,10 @@ class GlideCorpusTest {
             // rare words
             "щеколда", "выхухоль", "эклектика", "фьорд", "въедливый", "абрикосовый", "изюминка",
             "жёлудь", "гиппопотам", "щупальце", "сюрреализм", "чехарда", "брезгливость", "акварель",
-            "шпаргалка", "ухабистый", "эскимо")
+            "шпаргалка", "ухабистый", "эскимо",
+            // modern / slang / loanwords (1.2.2)
+            "свайпом", "свайпнуть", "скриншотом", "смартфоне", "гитхабе", "браузере", "апдейтов", "чатике",
+            "лайкнула", "загуглил", "стримы", "сторис", "кринжово", "дедлайна", "созвонимся")
         val EN = listOf("wonderful", "keyboards", "happened", "beautifully", "tomorrow", "yesterday", "anything",
             "remember", "different", "questions", "something", "together", "everyone", "probably",
             "thoughtful", "squirrel", "rhythm", "jealousy", "quickly", "excited")
@@ -64,5 +67,16 @@ class GlideCorpusTest {
         val (e1, e3) = run(qwerty, EN, listOf(en to 0.0, ru to 0.3), "EN")
         println("[corpus] TOTAL top1=${"%.1f".format(100 * (r1 * RU.size + e1 * EN.size) / (RU.size + EN.size))}% top3=${"%.1f".format(100 * (r3 * RU.size + e3 * EN.size) / (RU.size + EN.size))}%")
         assertTrue("min threshold", System.getProperty("kl.bench") != null || r3 >= 0.80)
+    }
+
+    @Test fun oovGuessFollowsLetters() {
+        val d = GlideDecoder(jcuken)
+        var ok = 0
+        for (w in listOf("свайп", "кринж", "лол", "мем", "зум")) {
+            val (x, y) = path(noisyPoints(jcuken, w, Random(7)))
+            val g = d.rawGuess(x, y, x.size)
+            println("[oov] $w -> $g"); if (g == w) ok++
+        }
+        assertTrue("oov guesses", ok >= 3)
     }
 }
