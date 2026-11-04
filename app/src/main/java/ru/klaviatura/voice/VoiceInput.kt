@@ -61,6 +61,7 @@ object VoiceInput {
 
     /** short label for the mic key */
     fun label(): String {
+        progress[currentLang()]?.let { return if (it < 0) "распак." else "$it%" }
         val l = currentLang().uppercase()
         return if (mixed()) "$l+${secondLang(currentLang()).uppercase()}" else l
     }
@@ -98,16 +99,41 @@ object VoiceInput {
         thread(name = "kl-voice") { runLoop(langs) }
     }
 
+    /** download progress per language, shown on the mic key: 0..100, or -1 = unzipping */
+    val progress = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     fun download(lang: String) {
-        if (!downloading.add(lang)) { toast("Модель «$lang» ещё скачивается…"); return }
-        toast("Скачиваю офлайн-модель голоса ($lang, ~45 МБ). Это один раз.")
+        val c = ctx ?: return
+        if (!downloading.add(lang)) { toast("Модель «$lang» ещё скачивается — прогресс в уведомлении"); return }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            c.startActivity(Intent(c, VoicePermissionActivity::class.java).putExtra("notif", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val n = DownloadNotifier(c, lang)
+        toast("Скачиваю офлайн-модель голоса ($lang). Прогресс — на кнопке микрофона и в уведомлении")
+        progress[lang] = 0; refresh()
         thread(name = "kl-voice-dl") {
+            val dir = modelDir(lang); val tmp = File(dir.parentFile, "$lang.tmp"); val zipFile = File(dir.parentFile, "$lang.zip")
             try {
-                val dir = modelDir(lang); val tmp = File(dir.parentFile, "$lang.tmp")
-                tmp.deleteRecursively(); tmp.mkdirs()
+                dir.parentFile?.mkdirs()
                 val conn = URL(MODELS[lang]).openConnection() as HttpURLConnection
                 conn.connectTimeout = 20000; conn.readTimeout = 60000
-                ZipInputStream(conn.inputStream.buffered()).use { zip ->
+                if (conn.responseCode !in 200..299) throw java.io.IOException("сервер ответил ${conn.responseCode}")
+                val total = conn.contentLengthLong
+                var done = 0L; var lastPct = -1; var lastT = 0L
+                conn.inputStream.use { inp -> zipFile.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val r = inp.read(buf); if (r < 0) break
+                        out.write(buf, 0, r); done += r
+                        val pct = if (total > 0) (done * 100 / total).toInt() else 0
+                        val now = System.currentTimeMillis()
+                        if (pct != lastPct && now - lastT > 300) { lastPct = pct; lastT = now; progress[lang] = pct; n.progress(pct, done, total); refresh() }
+                    }
+                } }
+                if (total > 0 && done < total) throw java.io.IOException("загрузка оборвалась (${mb(done)} из ${mb(total)} МБ)")
+                progress[lang] = -1; n.unzipping(); refresh()
+                tmp.deleteRecursively(); tmp.mkdirs()
+                ZipInputStream(zipFile.inputStream().buffered()).use { zip ->
                     while (true) {
                         val e = zip.nextEntry ?: break
                         val name = e.name.substringAfter('/') // strip top level folder
@@ -117,12 +143,23 @@ object VoiceInput {
                     }
                 }
                 dir.deleteRecursively(); tmp.renameTo(dir)
+                n.done()
                 toast("Модель голоса «$lang» готова — нажмите микрофон")
             } catch (e: Exception) {
-                toast("Не удалось скачать модель: ${e.message}")
-            } finally { downloading.remove(lang) }
+                tmp.deleteRecursively()
+                val msg = when (e) {
+                    is java.net.UnknownHostException -> "нет интернета"
+                    is java.net.SocketTimeoutException -> "сервер не отвечает"
+                    else -> e.message ?: e.javaClass.simpleName
+                }
+                n.error(msg)
+                toast("Не удалось скачать модель «$lang»: $msg. Нажмите «Повторить» в уведомлении или микрофон ещё раз")
+            } finally { zipFile.delete(); downloading.remove(lang); progress.remove(lang); refresh() }
         }
     }
+
+    fun mb(b: Long) = "%.1f".format(b / 1048576.0)
+    private fun refresh() = main.post { onStateChanged?.invoke() }
 
     private fun model(lang: String): Model = synchronized(loaded) { loaded.getOrPut(lang) { Model(modelDir(lang).absolutePath) } }
 

@@ -352,6 +352,14 @@ public class KeyboardView extends View {
             paint.setTextAlign(Paint.Align.RIGHT);
             paint.setColor(ru.klaviatura.voice.VoiceInput.INSTANCE.getListening() ? 0xFFE0A374 : params.mHintLetterColor);
             canvas.drawText(ru.klaviatura.voice.VoiceInput.INSTANCE.label(), key.getDrawWidth() - key.getHeight() * 0.08f, key.getHeight() * 0.28f, paint);
+            final Integer pr = ru.klaviatura.voice.VoiceInput.INSTANCE.getProgress().get(ru.klaviatura.voice.VoiceInput.INSTANCE.currentLang());
+            if (pr != null) {
+                final float bh = key.getHeight() * 0.07f, y = key.getHeight() - bh * 2, w = key.getDrawWidth();
+                paint.setColor(params.mHintLetterColor & 0x55FFFFFF);
+                canvas.drawRect(w * 0.12f, y, w * 0.88f, y + bh, paint);
+                paint.setColor(0xFFE0A374);
+                canvas.drawRect(w * 0.12f, y, w * 0.12f + w * 0.76f * (pr < 0 ? 1f : pr / 100f), y + bh, paint);
+            }
             paint.setTextSize(ts); paint.setColor(col); paint.setTextAlign(al);
         }
 
