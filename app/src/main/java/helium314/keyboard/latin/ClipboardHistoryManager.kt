@@ -47,10 +47,16 @@ class ClipboardHistoryManager(
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
 
+    private var screenshotObserver: android.database.ContentObserver? = null
+
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboardManager.addPrimaryClipChangedListener(this)
         clipboardDao = ClipboardDao.getInstance(latinIME)
+        try {
+            screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, android.os.Handler(android.os.Looper.getMainLooper())) { uri, ts, desc ->
+                if (latinIME.mSettings.current.mClipboardHistoryEnabled) clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) }
+        } catch (e: Throwable) { }
         if (latinIME.mSettings.current.mClipboardHistoryEnabled)
             fetchPrimaryClip()
     }
@@ -63,6 +69,7 @@ class ClipboardHistoryManager(
 
     fun onDestroy() {
         clipboardManager.removePrimaryClipChangedListener(this)
+        screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
     }
 
     override fun onPrimaryClipChanged() {
@@ -80,24 +87,24 @@ class ClipboardHistoryManager(
         if (tempPrimaryClip) return // avoid updating history
         val clipData = try { clipboardManager.primaryClip } catch (e: Exception) { null } ?: return
         if (clipData.itemCount == 0) return
-        val clipItem = clipData.getItemAt(0) ?: return
         val description = clipData.description ?: return
         val timeStamp = ClipboardManagerCompat.getClipTimestamp(clipData)
-
-        // Klaviatura: screenshots/galleries often put an image URI with an empty text or a "text/uri-list"
-        // description, or a description without mime type; detect the real type of the URI
-        val uri = clipItem.uri
-        val uriType = uri?.let { runCatching { latinIME.contentResolver.getType(it) }.getOrNull() }
-        val isFile = uri != null && (uriType?.startsWith("text/") == false || !description.hasMimeType("text/*")
-                || (clipItem.text.isNullOrEmpty() && uri.scheme == "content"))
-        if (isFile && maySaveFromUri(uri, latinIME)) {
-            val desc = if (uriType != null && !description.hasMimeType(uriType))
-                android.content.ClipDescription(description.label, arrayOf(uriType)) else description
-            clipboardDao?.addClipUri(timeStamp, false, uri!!, desc, latinIME)
-        } else if (description.hasMimeType("text/*") || clipItem.text != null) {
-            val content = clipItem.coerceToText(latinIME)
-            if (TextUtils.isEmpty(content)) return
-            clipboardDao?.addClip(timeStamp, false, content.toString())
+        // Klaviatura 1.3.1: every item (gallery "copy" may put several images); image URIs are copied into app
+        // storage right away, since the grant to read them ends with the clip
+        for (i in 0 until clipData.itemCount) {
+            val clipItem = clipData.getItemAt(i) ?: continue
+            val uri = clipItem.uri
+            val uriType = uri?.let { runCatching { latinIME.contentResolver.getType(it) }.getOrNull() }
+            if (ru.klaviatura.clip.ClipKind.isFile(uri?.scheme, uriType, description.hasMimeType("text/*"), clipItem.text.isNullOrEmpty())
+                    && maySaveFromUri(uri, latinIME)) {
+                val desc = if (uriType != null && !description.hasMimeType(uriType))
+                    android.content.ClipDescription(description.label, arrayOf(uriType)) else description
+                clipboardDao?.addClipUri(timeStamp + i, false, uri!!, desc, latinIME)
+            } else if (i == 0 && (description.hasMimeType("text/*") || clipItem.text != null)) {
+                val content = clipItem.coerceToText(latinIME)
+                if (TextUtils.isEmpty(content)) return
+                clipboardDao?.addClip(timeStamp, false, content.toString())
+            }
         }
     }
 
@@ -295,8 +302,8 @@ class ClipboardHistoryManager(
                     return size <= maxSize * 1000000L // maxSize is megabytes
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "error checking clip size", e) // happens with SecurityException: Permission Denial
-                return false
+                Log.w(TAG, "error checking clip size", e) // SecurityException on some providers (ColorOS gallery):
+                return true // still try to copy, the copy itself is guarded and the size limit applies afterwards
             }
         }
     }

@@ -492,6 +492,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             val res = SuggestionResults(SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false)
             res.addAll(own)
             res.mRawSuggestions?.addAll(own)
+            res.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
             own.firstOrNull()?.let { top -> try {
                 res.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(top.mWord, dictionaryGroups.map { it.locale.language }, res.map { it.mScore }))
             } catch (e: Throwable) { } }
@@ -531,6 +532,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             suggestionResults.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(composedData.mTypedWord, dictionaryGroups.map { it.locale.language }, suggestionResults.map { it.mScore }))
         } catch (e: Throwable) { }
 
+        suggestionResults.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
         return suggestionResults
     }
 

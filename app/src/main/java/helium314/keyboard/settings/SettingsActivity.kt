@@ -183,6 +183,7 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
     override fun onResume() {
         super.onResume()
         paused = false
+        try { ru.klaviatura.clip.Screenshots.askOnceFromSettings(this) } catch (e: Throwable) { }
     }
 
     fun setForceTheme(theme: String?, night: Boolean?) {

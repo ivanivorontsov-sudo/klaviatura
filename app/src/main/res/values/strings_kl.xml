@@ -34,4 +34,6 @@
     <string name="kl_reset_theme_confirm">Вернуть стандартную тему и цвета, удалить фоновые изображения (дневное и ночное) и сбросить размытие/затемнение?</string>
     <string name="kl_reset_theme_ok">Сбросить</string>
     <string name="kl_reset_theme_done">Тема сброшена</string>
+    <string name="kl_block_profanity">Блокировать нецензурные и грубые слова</string>
+    <string name="kl_block_profanity_summary">Мат и физиологические слова не предлагаются в подсказках, свайпе и автозамене, не запоминаются, а в голосовом вводе скрываются звёздочками</string>
 </resources>

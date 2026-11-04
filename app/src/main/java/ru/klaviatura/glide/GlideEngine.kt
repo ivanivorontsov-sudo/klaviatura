@@ -36,6 +36,7 @@ object GlideEngine : GlideLearning {
         if (appContext != null) return
         appContext = context.applicationContext
         ru.klaviatura.emoji.EmojiSuggest.init(context)
+        ru.klaviatura.text.Profanity.init(context)
         thread(name = "kl-glide-load") {
             for (lang in listOf("ru", "en")) { try { loadLexicon(lang); loadLm(lang) } catch (e: Throwable) { } }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
@@ -127,7 +128,7 @@ object GlideEngine : GlideLearning {
             }
         }
         val guess = decoder.rawGuess(xs, ys, n)
-        val all = if (guess != null && res.none { it.word == guess })
+        val all = if (guess != null && !isForgotten(guess) && res.none { it.word == guess })
             res.toMutableList().apply { add(minOf(3, size), GlideCandidate(guess, main, (res.getOrNull(minOf(3, size) - 1)?.cost ?: 0.0) + 0.01, false)) } else res
         lastDecoder = decoder; lastCandidates = all // picking the guess teaches the word (see learn)
         return all.mapIndexed { i, c ->
@@ -143,12 +144,13 @@ object GlideEngine : GlideLearning {
     override fun bigramBoost(prev: String?, word: String): Double =
         if (prev == null) 0.0 else (bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
             GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(prev, word) } ?: 0.0)
-    override fun isForgotten(word: String) = forgotten.contains(word)
+    override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
 
     /** called for every committed word (typed, swiped or picked from suggestions) */
     fun learn(rawWord: String, ngram: NgramContext) {
         val word = rawWord.lowercase()
         if (word.isEmpty() || word.any { !Character.isLetter(it) && it != '\'' && it != '-' }) return
+        if (ru.klaviatura.text.Profanity.blocks(word)) return // learned only when the filter is off
         forgotten.remove(word)
         unigrams.merge(word, 1, Int::plus)
         ngram.getNthPrevWord(1)?.toString()?.lowercase()?.let { bigrams.merge("$it\t$word", 1, Int::plus) }

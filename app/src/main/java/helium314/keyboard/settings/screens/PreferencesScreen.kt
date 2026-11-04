@@ -62,6 +62,7 @@ fun PreferencesScreen(
             Settings.PREF_KEYPRESS_SOUND_VOLUME else null,
         Settings.PREF_SAVE_SUBTYPE_PER_APP,
         Settings.PREF_SHOW_EMOJI_DESCRIPTIONS,
+        ru.klaviatura.text.Profanity.PREF,
         R.string.settings_category_additional_keys,
         Settings.PREF_SHOW_NUMBER_ROW,
         if (SubtypeSettings.getEnabledSubtypes(true).any { it.locale().language in localesWithLocalizedNumberRow })
@@ -197,9 +198,12 @@ fun createPreferencesSettings(context: Context) = listOf(
             ClipboardDao.getInstance(ctx)?.cleanupFiles(ctx.prefs())
         }
     },
+    Setting(context, ru.klaviatura.text.Profanity.PREF, R.string.kl_block_profanity, R.string.kl_block_profanity_summary) {
+        SwitchPreference(it, true) { ru.klaviatura.text.Profanity.enabled = it }
+    },
     Setting(context, ru.klaviatura.clip.Screenshots.PREF, R.string.kl_clip_screenshots, R.string.kl_clip_screenshots_summary) {
         val ctx = LocalContext.current
-        SwitchPreference(it, false) { on ->
+        SwitchPreference(it, ru.klaviatura.clip.Screenshots.DEFAULT) { on ->
             if (on) ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.clip.MediaPermissionActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         }

@@ -275,7 +275,7 @@ class GlideDecoder(val keys: List<GKey>) {
                     val w = lex.word(i)
                     val lastK = keyFor(w.last(), cross) ?: continue
                     if (dist(ex, ey, lastK.cx, lastK.cy) / kw > radius) continue
-                    if (learning?.isForgotten(w) == true) continue
+                    if (learning?.isForgotten(w) == true || ru.klaviatura.text.Profanity.blocks(w)) continue
                     val cost = score(w, cross, px, py, pathLen, xs, ys) ?: continue
                     val freq = lex.logf[i] / lex.maxLog
                     val total = cost - FREQ_W * freq - (learning?.wordBoost(w) ?: 0.0) -

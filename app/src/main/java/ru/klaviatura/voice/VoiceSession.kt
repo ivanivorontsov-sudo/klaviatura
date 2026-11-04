@@ -94,6 +94,7 @@ object VoiceText {
             w.isNotEmpty() && w.all { ch -> !ch.isLetter() || (if (cyr) ch in '\u0400'..'\u04FF' else ch !in '\u0400'..'\u04FF') }
         }
         words = dedupe(words)
+        words = words.map { ru.klaviatura.text.Profanity.mask(it) }
         if (commands) words = punctuate(words, lang)
         words = capitalize(words)
         return words.joinToString(" ").replace(Regex(" ([,.!?:;])"), "$1").replace(" \n ", "\n").trim()
