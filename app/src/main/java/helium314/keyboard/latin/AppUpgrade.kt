@@ -57,6 +57,7 @@ fun checkVersionUpgrade(context: Context) {
     val oldVersion = prefs.getInt(Settings.PREF_VERSION_CODE, 0)
     if (oldVersion != BuildConfig.VERSION_CODE)
         AppUpgrade.onUpgrade(context)
+    ru.klaviatura.emoji.EmojiDefaultsMigration.run(prefs)
 }
 
 fun transferOldPinnedClips(context: Context) {

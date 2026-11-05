@@ -99,7 +99,7 @@ sealed interface KeyData : AbstractKeyData {
             val keys = mutableListOf<String>()
             if (!params.mId.deviceLocked)
                 keys.add("!icon/clipboard_normal_key|!code/key_clipboard")
-            if (!params.mId.emojiKeyEnabled && !params.mId.element.isNumberLayout)
+            if (!params.mId.element.isNumberLayout) // klaviatura: comma long-press always offers emoji
                 keys.add("!icon/emoji_normal_key|!code/key_emoji")
             if (!params.mId.languageSwitchKeyEnabled && !params.mId.element.isNumberLayout && RichInputMethodManager.canSwitchLanguage())
                 keys.add("!icon/language_switch_key|!code/key_language_switch")
