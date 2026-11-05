@@ -77,8 +77,8 @@ class GestureRestartTest {
     @Test fun returnToStartDecodesLatestSegment() {
         val ru = lex("ru"); val d = GlideDecoder(jcuken)
         // started «привет», went back to «п» and swiped «пока»
-        // started «приве…», went back to «п» and swiped «пока» in one continuous gesture
-        val (xs, ys) = path(noisyPoints(jcuken, "пожалуйстапока", Random(3)))
+        // started «пюре», went back to «п» and swiped «пока» in one continuous gesture
+        val (xs, ys) = path(noisyPoints(jcuken, "пюрепока", Random(3)))
         val full = d.decode(xs, ys, xs.size, listOf(ru to 0.0))
         val starts = GestureRestart.returnStarts(xs, ys, xs.size, kw)
         assertTrue("restart candidates", starts.isNotEmpty())
