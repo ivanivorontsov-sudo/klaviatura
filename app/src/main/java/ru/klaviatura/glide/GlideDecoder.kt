@@ -23,6 +23,11 @@ class Lexicon(val lang: String) {
     private var table = IntArray(2048) { -1 }
     private val firstLists = HashMap<Char, IntList>()
     var maxLog = 1f
+    // 1.4.0: own alphabet per lexicon (1 byte per letter for any script: Polish, German, Ukrainian, Greek ...)
+    private val b2c = CharArray(256)
+    private val fast = IntArray(0x530) // char -> code for Latin/Greek/Cyrillic, 0 = unknown
+    private val slow = HashMap<Char, Int>()
+    private var nCodes = 0
 
     class IntList { var a = IntArray(16); var n = 0
         fun add(v: Int) { if (n == a.size) a = a.copyOf(n * 2); a[n++] = v } }
@@ -35,16 +40,27 @@ class Lexicon(val lang: String) {
     val logf: FloatArray get() = lf
     val byFirst: Map<Char, IntList> get() = firstLists
 
-    fun word(i: Int): String { val o = off[i]; val l = len(i); return String(CharArray(l) { dec(buf[o + it]) }) }
-    fun firstChar(i: Int) = dec(buf[off[i]])
+    private fun code(c: Char): Int = if (c.code < fast.size) fast[c.code] else slow[c] ?: 0
+    private fun codeOrAdd(c: Char): Int {
+        code(c).let { if (it != 0) return it }
+        if (nCodes >= 255) return 0
+        val v = ++nCodes; b2c[v] = c
+        if (c.code < fast.size) fast[c.code] = v else slow[c] = v
+        return v
+    }
+    fun word(i: Int): String { val o = off[i]; val l = len(i); return String(CharArray(l) { b2c[buf[o + it].toInt() and 0xFF] }) }
+    fun charAt(i: Int, k: Int): Char = b2c[buf[off[i] + k].toInt() and 0xFF]
+    fun length(i: Int) = len(i)
+    fun firstChar(i: Int) = charAt(i, 0)
     private fun len(i: Int) = (if (i + 1 < size) off[i + 1] else bufLen) - off[i]
 
     private fun hash(w: CharSequence): Int { var h = 0; for (c in w) h = h * 31 + c.code; return h and 0x7fffffff }
     private fun eq(i: Int, w: CharSequence): Boolean {
         val l = len(i); if (l != w.length) return false
-        val o = off[i]; for (k in 0 until l) if (buf[o + k] != enc(w[k])) return false; return true
+        val o = off[i]; for (k in 0 until l) if ((buf[o + k].toInt() and 0xFF) != code(w[k])) return false; return true
     }
     private fun find(w: CharSequence): Int {
+        for (c in w) if (code(c) == 0) return -1
         val m = table.size - 1; var p = hash(w) and m
         while (true) { val v = table[p]; if (v < 0) return -1; if (eq(v, w)) return v; p = (p + 1) and m }
     }
@@ -62,11 +78,12 @@ class Lexicon(val lang: String) {
     fun indexOf(w: String) = find(w)
 
     fun add(word: String, count: Long) {
-        if (word.isEmpty() || word.any { enc(it) == BAD } || find(word) >= 0) return
+        if (word.isEmpty() || find(word) >= 0) return
+        for (c in word) if (codeOrAdd(c) == 0) return
         val i = size
         if (i + 1 >= off.size) { off = off.copyOf(off.size * 2); lf = lf.copyOf(lf.size * 2) }
         while (bufLen + word.length > buf.size) buf = buf.copyOf(buf.size * 2)
-        for (k in word.indices) buf[bufLen + k] = enc(word[k]); off[i] = bufLen; bufLen += word.length
+        for (k in word.indices) buf[bufLen + k] = code(word[k]).toByte(); off[i] = bufLen; bufLen += word.length
         val l = ln(1.0 + count).toFloat(); lf[i] = l; maxLog = max(maxLog, l)
         size++
         if (size * 2 > table.size) grow() else put(i, word)
@@ -78,18 +95,6 @@ class Lexicon(val lang: String) {
         firstLists.values.forEach { it.a = it.a.copyOf(it.n) } }
 
     companion object {
-        /** 1 byte per letter (cp1251-like): halves the memory of the 1.36M-form Russian lexicon */
-        const val BAD: Byte = 0x7F
-        fun enc(c: Char): Byte = when {
-            c.code < 0x7F -> c.code.toByte()
-            c in 'а'..'я' -> (0xE0 + (c - 'а')).toByte()
-            c in 'А'..'Я' -> (0xC0 + (c - 'А')).toByte()
-            c == 'ё' -> 0xB8.toByte(); c == 'Ё' -> 0xA8.toByte()
-            else -> BAD
-        }
-        fun dec(b: Byte): Char { val v = b.toInt() and 0xFF; return when {
-            v < 0x7F -> v.toChar(); v >= 0xE0 -> 'а' + (v - 0xE0); v >= 0xC0 -> 'А' + (v - 0xC0)
-            v == 0xB8 -> 'ё'; v == 0xA8 -> 'Ё'; else -> '?' } }
         fun parse(lang: String, lines: Sequence<String>): Lexicon {
             val lex = Lexicon(lang)
             for (line in lines) {
@@ -183,8 +188,19 @@ class GlideDecoder(val keys: List<GKey>) {
     private fun keyFor(c: Char, cross: Boolean): GKey? {
         val ch = if (c == 'ё') 'е' else c
         keyByChar[ch]?.let { return it }
+        keyByChar[Fold.fold(ch)]?.let { return it }
         if (!cross) return null
-        return (CrossLayout.latToCyr[ch] ?: CrossLayout.cyrToLat[ch])?.let { keyByChar[it] }
+        return (CrossLayout.latToCyr[ch] ?: CrossLayout.cyrToLat[ch] ?: Fold.fold(ch).let { CrossLayout.latToCyr[it] ?: CrossLayout.cyrToLat[it] })?.let { keyByChar[it] }
+    }
+
+    // key centers in key units (x / key width, y / key height): distances are isotropic in "keys"
+    private val kux = FloatArray(keys.size) { keys[it].cx / kw }
+    private val kuy = FloatArray(keys.size) { keys[it].cy / kh }
+    private val keyIdx = HashMap<GKey, Int>().apply { this@GlideDecoder.keys.forEachIndexed { i, k -> put(k, i) } }
+    private val idxCache = arrayOf(HashMap<Char, Int>(), HashMap<Char, Int>())
+    /** key index for a letter, -1 = no key, -2 = joiner (hyphen / apostrophe: not swiped) */
+    private fun idx(c: Char, cross: Boolean): Int = idxCache[if (cross) 1 else 0].getOrPut(c) {
+        if (Fold.isJoiner(c)) -2 else keyFor(c, cross)?.let { keyIdx[it] } ?: -1
     }
 
     /** normalized distance of point to nearest letter key center (in key sizes) */
@@ -266,37 +282,56 @@ class GlideDecoder(val keys: List<GKey>) {
         }
         lastStart = xs0.first() to ys0.first(); lastEnd = xs0.last() to ys0.last()
         val best = HashMap<String, GlideCandidate>()
+        val p = P
+        val seq = IntArray(64)
         for ((xs, ys, variantPenalty) in variants) {
-        val pathLen = length(xs, ys)
-        val (px, py) = resample(xs, ys, N)
-        val sx = xs.first(); val sy = ys.first(); val ex = xs.last(); val ey = ys.last()
-        val radius = 1.6f
-        for ((lex, langPenalty) in lexicons) {
-            // decide whether the lexicon's script is on the keyboard; otherwise map positionally (cross)
-            if (lex.size == 0) continue
-            val sample = lex.word(0)
-            val cross = keyFor(sample.first(), false) == null
-            val startChars = HashSet<Char>()
-            for (c in lex.byFirst.keys) {
-                val k = keyFor(c, cross) ?: continue
-                if (dist(sx, sy, k.cx, k.cy) / kw < radius) startChars.add(c)
-            }
-            for (c in startChars) {
-                val fl = lex.byFirst[c]!!
-                for (fi in 0 until fl.n) { val i = fl.a[fi]
-                    val w = lex.word(i)
-                    val lastK = keyFor(w.last(), cross) ?: continue
-                    if (dist(ex, ey, lastK.cx, lastK.cy) / kw > radius) continue
-                    if (learning?.isForgotten(w) == true || ru.klaviatura.text.Profanity.blocks(w)) continue
-                    val cost = score(w, cross, px, py, pathLen, xs, ys) ?: continue
-                    val freq = lex.logf[i] / lex.maxLog
-                    val total = cost - FREQ_W * freq - (learning?.wordBoost(w) ?: 0.0) -
-                        (learning?.bigramBoost(prevWord, w) ?: 0.0) + langPenalty + variantPenalty + (if (cross) CROSS_PENALTY else 0.0)
-                    val old = best[w]
-                    if (old == null || old.cost > total) best[w] = GlideCandidate(w, lex.lang, total, cross)
+            // path in key units
+            val ux = FloatArray(xs.size) { xs[it] / kw }; val uy = FloatArray(ys.size) { ys[it] / kh }
+            val pathLen = length(ux, uy)
+            val (px, py) = resample(ux, uy, N)
+            val (dx, dy) = resample(ux, uy, N * 3)
+            // how close the path comes to every key (for the "each letter must be passed" check)
+            val near = FloatArray(keys.size) { k -> var b = Float.MAX_VALUE; for (i in dx.indices) b = min(b, dist(dx[i], dy[i], kux[k], kuy[k])); b }
+            val sx = px[0]; val sy = py[0]; val ex = px[N - 1]; val ey = py[N - 1]
+            val qx = FloatArray(N); val qy = FloatArray(N)
+            for ((lex, langPenalty) in lexicons) {
+                if (lex.size == 0) continue
+                // decide whether the lexicon's script is on the keyboard; otherwise map positionally (cross)
+                val cross = idx(lex.firstChar(0), false) < 0 && idx(lex.firstChar(minOf(1, lex.size - 1)), false) < 0
+                for ((c, fl) in lex.byFirst) {
+                    val k0 = idx(c, cross)
+                    if (k0 < 0) continue
+                    if (dist(sx, sy, kux[k0], kuy[k0]) > p.radius) continue
+                    for (fi in 0 until fl.n) { val i = fl.a[fi]
+                        val len = lex.length(i)
+                        // key sequence (joiners skipped, repeated letters collapse)
+                        var m = 0; var ok = true; var miss = 0.0
+                        for (k in 0 until len) {
+                            val ki = idx(lex.charAt(i, k), cross)
+                            if (ki == -2) continue
+                            if (ki < 0 || m >= seq.size) { ok = false; break }
+                            if (m > 0 && seq[m - 1] == ki) continue
+                            val d = near[ki]
+                            if (d > p.nearMax) { ok = false; break }
+                            if (d > p.nearOk) miss += d - p.nearOk
+                            seq[m++] = ki
+                        }
+                        if (!ok || m < 2 && pathLen > 1.2f) continue
+                        if (miss > p.missMax) continue
+                        val kl = seq[m - 1]
+                        if (dist(ex, ey, kux[kl], kuy[kl]) > p.radius) continue
+                        val freq = lex.logf[i] / lex.maxLog
+                        // cheap bound: even a perfect shape can't beat the current worst of a full list
+                        val geo = score(seq, m, px, py, pathLen, qx, qy, miss) ?: continue
+                        val w = lex.word(i)
+                        if (learning?.isForgotten(w) == true || ru.klaviatura.text.Profanity.blocks(w)) continue
+                        val total = geo - p.freqW * freq - (learning?.wordBoost(w) ?: 0.0) -
+                            (learning?.bigramBoost(prevWord, w) ?: 0.0) + langPenalty + variantPenalty + (if (cross) CROSS_PENALTY else 0.0)
+                        val old = best[w]
+                        if (old == null || old.cost > total) best[w] = GlideCandidate(w, lex.lang, total, cross)
+                    }
                 }
             }
-        }
         }
         val out = ArrayList(best.values)
         out.sortBy { it.cost }
@@ -304,51 +339,99 @@ class GlideDecoder(val keys: List<GKey>) {
         return out.filter { seen.add(it.word) }.take(max)
     }
 
-    private fun score(w: String, cross: Boolean, px: FloatArray, py: FloatArray, pathLen: Float, xs: FloatArray, ys: FloatArray): Double? {
-        val tx = ArrayList<Float>(); val ty = ArrayList<Float>()
-        var lastK: GKey? = null
-        for (c in w) {
-            val k = keyFor(c, cross) ?: return null
-            if (k !== lastK) { tx.add(k.cx); ty.add(k.cy) }
-            lastK = k
-        }
-        val txa = tx.toFloatArray(); val tya = ty.toFloatArray()
-        val tLen = length(txa, tya)
-        // quick length check: path much shorter than template is impossible
-        if (pathLen < tLen * 0.45f - kw) return null
-        val (qx, qy) = resample(txa, tya, N)
+    /**
+     * geometric cost of a word's key sequence against the path (all in key units):
+     * shape (uniformly resampled point distance), ordered key alignment (each key in order must be hit by some part of
+     * the path, DTW-like), deviation of the path from the word's polyline, start / end distance, missed keys, length.
+     */
+    private fun score(seq: IntArray, m: Int, px: FloatArray, py: FloatArray, pathLen: Float, qx: FloatArray, qy: FloatArray, miss: Double): Double? {
+        val p = P
+        var tLen = 0f
+        for (j in 1 until m) tLen += dist(kux[seq[j - 1]], kuy[seq[j - 1]], kux[seq[j]], kuy[seq[j]])
+        if (pathLen < tLen * 0.45f - 1f) return null
+        if (pathLen > tLen * 2.2f + 2.5f) return null
+        // template resampled to N points
+        templateInto(seq, m, tLen, qx, qy)
         var loc = 0.0
         for (i in 0 until N) loc += dist(px[i], py[i], qx[i], qy[i])
-        loc /= N * kw
-        if (loc > 1.6) return null
-        val start = dist(px[0], py[0], qx[0], qy[0]) / kw
-        val end = dist(px[N - 1], py[N - 1], qx[N - 1], qy[N - 1]) / kw
-        // every key of the word must be passed by the path
-        var miss = 0.0
-        for (j in txa.indices) {
-            var best = Float.MAX_VALUE
-            var i = 0
-            while (i < xs.size) { best = min(best, dist(xs[i], ys[i], txa[j], tya[j])); i++ }
-            val d = best / kw
-            if (d > 0.55) miss += (d - 0.55)
+        loc /= N
+        if (loc > p.locMax) return null
+        val start = dist(px[0], py[0], qx[0], qy[0]).toDouble()
+        val end = dist(px[N - 1], py[N - 1], qx[N - 1], qy[N - 1]).toDouble()
+        // ordered alignment: key j is matched to path point a_j, a non-decreasing, a_1 near the start, a_m near the end
+        var prev = DoubleArray(N); var cur = DoubleArray(N)
+        for (i in 0 until N) { val d = dist(px[i], py[i], kux[seq[0]], kuy[seq[0]]); prev[i] = d * d + i * p.skipW }
+        for (j in 1 until m) {
+            val kx = kux[seq[j]]; val ky = kuy[seq[j]]
+            var run = Double.MAX_VALUE
+            for (i in 0 until N) {
+                run = min(run, prev[i])
+                val d = dist(px[i], py[i], kx, ky)
+                cur[i] = run + d * d
+            }
+            val t = prev; prev = cur; cur = t
         }
-        val ratio = (pathLen + kw) / (tLen + kw)
-        val lenPen = abs(ln(ratio.toDouble()))
-        return LOC_W * loc + START_W * start + END_W * end + MISS_W * miss + LEN_W * lenPen
+        var align = Double.MAX_VALUE
+        for (i in 0 until N) align = min(align, prev[i] + (N - 1 - i) * p.skipW)
+        align /= m
+        // path points far from the word's polyline (e.g. an extra excursion to another key)
+        var dev = 0.0
+        for (i in 0 until N) {
+            var b = Float.MAX_VALUE
+            for (j in 1 until m) b = min(b, segDist(px[i], py[i], kux[seq[j - 1]], kuy[seq[j - 1]], kux[seq[j]], kuy[seq[j]]))
+            if (m == 1) b = dist(px[i], py[i], kux[seq[0]], kuy[seq[0]])
+            if (b > p.devOk) dev += (b - p.devOk) * (b - p.devOk)
+        }
+        dev /= N
+        val lenPen = abs(ln(((pathLen + 1f) / (tLen + 1f)).toDouble()))
+        return p.locW * loc + p.alignW * align + p.devW * dev + p.startW * start + p.endW * end + p.missW * miss + p.lenW * lenPen
+    }
+
+    private fun templateInto(seq: IntArray, m: Int, tLen: Float, ox: FloatArray, oy: FloatArray) {
+        if (m == 1 || tLen == 0f) { ox.fill(kux[seq[0]]); oy.fill(kuy[seq[0]]); return }
+        val step = tLen / (N - 1)
+        var seg = 1; var segStart = 0f
+        var segLen = dist(kux[seq[0]], kuy[seq[0]], kux[seq[1]], kuy[seq[1]])
+        for (i in 0 until N) {
+            val t = i * step
+            while (seg < m - 1 && t > segStart + segLen) { segStart += segLen; seg++; segLen = dist(kux[seq[seg - 1]], kuy[seq[seg - 1]], kux[seq[seg]], kuy[seq[seg]]) }
+            val f = if (segLen > 0f) ((t - segStart) / segLen).coerceIn(0f, 1f) else 0f
+            val ax = kux[seq[seg - 1]]; val ay = kuy[seq[seg - 1]]
+            ox[i] = ax + (kux[seq[seg]] - ax) * f; oy[i] = ay + (kuy[seq[seg]] - ay) * f
+        }
+    }
+
+    /** tunable weights (tuned on the synthetic benchmark, see GlideBenchTest / tools) */
+    class Params {
+        @JvmField var radius = 1.25f
+        @JvmField var nearOk = 1.0f
+        @JvmField var nearMax = 1.56f
+        @JvmField var missMax = 1.2
+        @JvmField var locMax = 1.6
+        @JvmField var skipW = 0.02
+        @JvmField var devOk = 0.15f
+        @JvmField var locW = 2.05
+        @JvmField var alignW = 0.58
+        @JvmField var devW = 4.0
+        @JvmField var startW = 0.8
+        @JvmField var endW = 1.6
+        @JvmField var missW = 1.2
+        @JvmField var lenW = 0.3
+        @JvmField var freqW = 2.8
     }
 
     companion object {
         const val N = 40
-        const val LOC_W = 2.2
-        const val START_W = 1.1
-        const val END_W = 1.3
-        const val MISS_W = 2.5
-        const val LEN_W = 0.6
-        const val FREQ_W = 1.1
+        @JvmField var P = Params()
         /** weight of base context LM: modest, geometry dominates */
         const val CTX_W = 0.6
         const val CROSS_PENALTY = 0.45
 
+        fun segDist(x: Float, y: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
+            val vx = bx - ax; val vy = by - ay; val l2 = vx * vx + vy * vy
+            val t = if (l2 == 0f) 0f else (((x - ax) * vx + (y - ay) * vy) / l2).coerceIn(0f, 1f)
+            return dist(x, y, ax + t * vx, ay + t * vy)
+        }
         fun dist(ax: Float, ay: Float, bx: Float, by: Float): Float { val dx = ax - bx; val dy = ay - by; return sqrt(dx * dx + dy * dy) }
         fun length(x: FloatArray, y: FloatArray): Float { var l = 0f; for (i in 1 until x.size) l += dist(x[i - 1], y[i - 1], x[i], y[i]); return l }
 

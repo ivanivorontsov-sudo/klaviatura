@@ -1,22 +1,22 @@
-q
-w
-e
-r
-t
-y
-u
-i
-o
-p
+q `
+w ~
+e =
+r ^
+t {
+y }
+u [
+i ]
+o <
+p >
 
 a
 s
 d
 f
 g
-h
-j
-k
+h |
+j \\
+k %
 l
 
 z

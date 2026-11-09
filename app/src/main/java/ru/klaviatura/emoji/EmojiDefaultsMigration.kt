@@ -12,7 +12,10 @@ import helium314.keyboard.latin.settings.Settings
 object EmojiDefaultsMigration {
     const val PREF_DONE = "klaviatura_emoji_defaults_v1"
 
+    const val PREF_PINNED_DONE = "klaviatura_pinned_defaults_v2"
+
     fun run(prefs: SharedPreferences) {
+        runPinned(prefs)
         if (prefs.getBoolean(PREF_DONE, false)) return
         val e = prefs.edit()
         prefs.getString(Settings.PREF_TOOLBAR_KEYS, null)?.let { e.putString(Settings.PREF_TOOLBAR_KEYS, migrateToolbar(it)) }
@@ -26,5 +29,19 @@ object EmojiDefaultsMigration {
         val idx = entries.indexOfFirst { it.substringBefore(Separators.KV) == "SETTINGS" }
         entries.add(idx + 1, "EMOJI" + Separators.KV + "true")
         return entries.joinToString(Separators.ENTRY)
+    }
+
+    /** 1.4.0: clipboard, emoji and mic pinned on the suggestion strip (once; the user may unpin them later) */
+    fun runPinned(prefs: SharedPreferences) {
+        if (prefs.getBoolean(PREF_PINNED_DONE, false)) return
+        val e = prefs.edit()
+        prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let { e.putString(Settings.PREF_PINNED_TOOLBAR_KEYS, migratePinned(it)) }
+        e.putBoolean(PREF_PINNED_DONE, true).apply()
+    }
+
+    fun migratePinned(value: String, keys: List<String> = listOf("CLIPBOARD", "EMOJI", "VOICE")): String {
+        val entries = value.split(Separators.ENTRY).filter { it.isNotBlank() }.toMutableList()
+        entries.removeAll { it.substringBefore(Separators.KV) in keys }
+        return (keys.map { it + Separators.KV + "true" } + entries).joinToString(Separators.ENTRY)
     }
 }

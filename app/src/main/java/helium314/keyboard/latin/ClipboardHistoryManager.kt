@@ -55,10 +55,17 @@ class ClipboardHistoryManager(
         clipboardDao = ClipboardDao.getInstance(latinIME)
         try {
             screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, android.os.Handler(android.os.Looper.getMainLooper())) { uri, ts, desc ->
-                if (latinIME.mSettings.current.mClipboardHistoryEnabled) clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) }
+                if (latinIME.mSettings.current.mClipboardHistoryEnabled) { clipboardDao?.addClipUri(ts, false, uri, desc, latinIME); refreshStripForImage() } }
         } catch (e: Throwable) { }
         if (latinIME.mSettings.current.mClipboardHistoryEnabled)
             fetchPrimaryClip()
+    }
+
+    /** a screenshot arrived while the keyboard is open: show its thumbnail right away (unless a word is being typed) */
+    private fun refreshStripForImage() {
+        try {
+            if (latinIME.isInputViewShown && latinIME.mInputLogic.getComposingLength() == 0) latinIME.setNeutralSuggestionStrip()
+        } catch (e: Throwable) { }
     }
 
     fun onStartInputView() {
@@ -204,11 +211,90 @@ class ClipboardHistoryManager(
         // but a cache has to consider a few possible changes, so better don't implement without need
         clipboardSuggestionView = null
 
-        // get the content, or return null
         if (!latinIME.mSettings.current.mSuggestClipboardContent) return null
-        if (dontShowCurrentSuggestion) return null
         if (parent == null) return null
-        val clipData = clipboardManager.primaryClip ?: return null
+        val primary = if (dontShowCurrentSuggestion) null else primaryClipSuggestionView(editorInfo, parent)
+        // Klaviatura 1.4.0: fresh screenshots / copied images from the history appear as a thumbnail above the keys
+        return primary ?: recentImageSuggestionView(editorInfo, parent) ?: screenshotPermissionView(parent)
+    }
+
+    /** newest image clip of the last minutes (screenshots go only into the history, not into the primary clip) */
+    fun recentImageEntry(now: Long = System.currentTimeMillis()): ClipboardHistoryEntry? =
+        clipboardDao?.getAll()?.filter { it.filename != null && it.mimeTypes?.any { m -> m.startsWith("image/") } == true }
+            ?.maxByOrNull { it.timeStamp }
+            ?.takeIf { now - it.timeStamp in -60_000L..RECENT_IMAGE_MILLIS && it.id != dismissedImageId }
+
+    private fun recentImageSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup): View? {
+        val inputType = editorInfo?.inputType ?: InputType.TYPE_NULL
+        if (InputTypeUtils.isNumberInputType(inputType) || InputTypeUtils.isPasswordInputType(inputType)) return null
+        val entry = recentImageEntry() ?: return null
+        val file = java.io.File(ClipboardDao.clipFilesDir, entry.filename!!)
+        if (!file.isFile) return null
+        val binding = ClipboardSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
+        val textView = binding.clipboardSuggestionText
+        val imageView = binding.clipboardSuggestionImage
+        val h = (parent.height.takeIf { it > 0 } ?: (40 * latinIME.resources.displayMetrics.density).toInt())
+        val bmp = try {
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.absolutePath, o)
+            o.inSampleSize = maxOf(1, minOf(o.outWidth, o.outHeight) / maxOf(1, h * 2))
+            o.inJustDecodeBounds = false
+            android.graphics.BitmapFactory.decodeFile(file.absolutePath, o)
+        } catch (e: Throwable) { null } ?: return null
+        imageView.isVisible = true
+        imageView.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+        imageView.adjustViewBounds = false
+        imageView.layoutParams = imageView.layoutParams.apply { height = h; width = (h * 1.3f).toInt() }
+        imageView.setImageBitmap(bmp)
+        imageView.contentDescription = entry.text ?: "image"
+        textView.layoutParams = (textView.layoutParams as android.widget.LinearLayout.LayoutParams).apply { width = ViewGroup.LayoutParams.WRAP_CONTENT; weight = 0f }
+        textView.text = if (entry.text?.contains("Скрин") == true) "Скриншот" else "Картинка"
+        val onClick = View.OnClickListener {
+            dismissedImageId = entry.id
+            try { latinIME.mKeyboardActionListener.onContent(entry.getContentInfo(latinIME)) } catch (e: Exception) { Log.w(TAG, "paste image", e) }
+            AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
+            binding.root.isGone = true
+            latinIME.setNeutralSuggestionStrip()
+        }
+        imageView.setOnClickListener(onClick)
+        textView.setOnClickListener(onClick)
+        styleSuggestion(binding, textView) { dismissedImageId = entry.id; removeClipboardSuggestion() }
+        clipboardSuggestionView = binding.root
+        return clipboardSuggestionView
+    }
+
+    /** an IME can't ask for permissions itself: offer a one-tap way to allow screenshots in the clipboard */
+    private fun screenshotPermissionView(parent: ViewGroup): View? {
+        if (!ru.klaviatura.clip.Screenshots.shouldOfferPermission(latinIME)) return null
+        val binding = ClipboardSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
+        val textView = binding.clipboardSuggestionText
+        textView.text = "📷 Разрешить скриншоты в буфере"
+        textView.setOnClickListener {
+            ru.klaviatura.clip.Screenshots.markOffered(latinIME)
+            binding.root.isGone = true
+            try { latinIME.startActivity(android.content.Intent(latinIME, ru.klaviatura.clip.MediaPermissionActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
+        }
+        styleSuggestion(binding, textView) { ru.klaviatura.clip.Screenshots.markOffered(latinIME); removeClipboardSuggestion() }
+        clipboardSuggestionView = binding.root
+        return clipboardSuggestionView
+    }
+
+    private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
+        KeyboardTypeface.applyToTextView(textView)
+        val closeButton = binding.clipboardSuggestionClose
+        closeButton.setImageDrawable(KeyboardIconsSet.instance.getIconDrawable(ToolbarKey.CLOSE_HISTORY.name.lowercase()))
+        closeButton.layoutParams.width = textView.lineHeight
+        closeButton.layoutParams.height = textView.lineHeight
+        closeButton.setOnClickListener { onClose() }
+        val colors = latinIME.mSettings.current.mColors
+        textView.setTextColor(colors.get(ColorType.KEY_TEXT))
+        colors.setColor(closeButton, ColorType.REMOVE_SUGGESTION_ICON)
+        colors.setBackground(binding.root, ColorType.CLIPBOARD_SUGGESTION_BACKGROUND)
+    }
+
+    private fun primaryClipSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup): View? {
+        val clipData = try { clipboardManager.primaryClip } catch (e: Exception) { null } ?: return null
         if (clipData.itemCount == 0) return null
         val clipItem = clipData.getItemAt(0) ?: return null
         val hasText = clipData.description?.hasMimeType("text/*") == true
@@ -287,6 +373,9 @@ class ClipboardHistoryManager(
 
         // avoid showing the current suggestion because it has been dismissed or pasted
         private var dontShowCurrentSuggestion: Boolean = false
+        /** image suggestion that was pasted or dismissed */
+        private var dismissedImageId: Long = -1
+        const val RECENT_IMAGE_MILLIS = 10 * 60 * 1000L
 
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)
 

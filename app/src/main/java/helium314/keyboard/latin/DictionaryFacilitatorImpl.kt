@@ -155,6 +155,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         synchronized(this) {
             oldDictionaryGroups = dictionaryGroups
             dictionaryGroups = newDictionaryGroups
+            try { ru.klaviatura.glide.GlideEngine.preload(newDictionaryGroups.map { it.locale.language }) } catch (e: Throwable) { }
             if (hasAtLeastOneUninitializedMainDictionary()) {
                 asyncReloadUninitializedMainDictionaries(context, locales, listener)
             }

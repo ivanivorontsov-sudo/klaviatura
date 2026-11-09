@@ -29,6 +29,12 @@ object VoiceInput {
     const val PREF_ENGINE = "kl_voice_builtin"   // true = built-in, false = system voice IME
     const val PREF_MIXED = "kl_voice_mixed"
     const val PREF_COMMANDS = "kl_voice_commands"
+    /** 1.4.0: how long recording continues without speech (seconds); [SILENCE_NEVER] = until the mic is tapped */
+    const val PREF_SILENCE_S = "kl_voice_silence_s"
+    const val DEFAULT_SILENCE_S = 20
+    const val SILENCE_NEVER = 61
+    /** pause that ends a phrase (it is committed, recording goes on) */
+    const val PHRASE_PAUSE_S = 2.4f
 
     private val main = Handler(Looper.getMainLooper())
     private var ctx: Context? = null
@@ -159,7 +165,11 @@ object VoiceInput {
             modelConfig = com.k2fsa.sherpa.onnx.OnlineModelConfig(
                 transducer = com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig("$d/encoder.int8.onnx", "$d/decoder.onnx", "$d/joiner.int8.onnx"),
                 tokens = "$d/tokens.txt", numThreads = 2, modelType = "zipformer2"),
-            endpointConfig = com.k2fsa.sherpa.onnx.EndpointConfig(),
+            // 1.4.0: a phrase ends only after a longer pause (default 1.2 s cut sentences while thinking)
+            endpointConfig = com.k2fsa.sherpa.onnx.EndpointConfig(
+                rule1 = com.k2fsa.sherpa.onnx.EndpointRule(false, 5.0f, 0.0f),
+                rule2 = com.k2fsa.sherpa.onnx.EndpointRule(true, PHRASE_PAUSE_S, 0.0f),
+                rule3 = com.k2fsa.sherpa.onnx.EndpointRule(false, 0.0f, 30.0f)),
             enableEndpoint = true, decodingMethod = "greedy_search"))
     } }
 
@@ -224,6 +234,8 @@ object VoiceInput {
             rec.startRecording()
             val buf = ShortArray(1600) // 100 ms
             var lastUi = 0L
+            var lastVoice = System.currentTimeMillis()
+            val silenceMs = silenceMillis(ctx?.prefs()?.getInt(PREF_SILENCE_S, DEFAULT_SILENCE_S) ?: DEFAULT_SILENCE_S)
             while (!stopRequested) {
                 restartLang?.let { nl ->
                     restartLang = null
@@ -240,7 +252,9 @@ object VoiceInput {
                 session.feed(buf, n)
                 val now = System.currentTimeMillis()
                 if (now - lastUi > 120) { lastUi = now; refresh() }
-                if (now - session.lastSpeechAt > 6000) break // silence -> stop
+                // speech energy also counts as activity (quiet speech whose partial is still empty)
+                if (level > 0.12f) lastVoice = now
+                if (silenceMs in 1 until Long.MAX_VALUE && now - maxOf(session.lastSpeechAt, lastVoice) > silenceMs) break // silence -> stop
             }
             session.finish()
         } catch (e: Exception) {
@@ -262,3 +276,6 @@ interface VoiceTarget {
     fun commitPhrase(text: String)
     fun endVoice()
 }
+
+/** seconds from the settings slider -> milliseconds; "never" = Long.MAX_VALUE (only the mic button stops) */
+fun silenceMillis(seconds: Int): Long = if (seconds >= VoiceInput.SILENCE_NEVER) Long.MAX_VALUE else seconds.coerceAtLeast(3) * 1000L

@@ -103,6 +103,7 @@ object GlideEngine : GlideLearning {
         }
         if (keys.isEmpty()) return emptyList()
         val main = keyboard.mId.locale.language
+        lastMainLang = main
         val langs = (listOf(main) + locales.map { it.language }).distinct()
         val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }
         if (lex.isEmpty()) return emptyList()
@@ -140,6 +141,18 @@ object GlideEngine : GlideLearning {
         }
     }
 
+    /** languages with Cyrillic script (for learning new words into the right lexicon) */
+    private val CYR = setOf("ru", "uk", "bg", "be", "sr", "mk", "kk")
+    @Volatile private var lastMainLang = "ru"
+    private fun learnLang(word: String): String {
+        val cyr = word.any { it in '\u0400'..'\u04FF' }
+        val main = lastMainLang
+        return if (cyr) (if (main in CYR) main else "ru") else if (main !in CYR && main != "el") main else "en"
+    }
+
+    /** start loading the lexicons of the enabled languages in the background (so the first swipe already works) */
+    fun preload(langs: Collection<String>) { for (l in langs) lexiconIfReady(l) }
+
     // ---- learning (local only) ----
     override fun wordBoost(word: String): Double = unigrams[word]?.let { 0.25 * ln(1.0 + it) } ?: 0.0
     override fun bigramBoost(prev: String?, word: String): Double =
@@ -156,8 +169,7 @@ object GlideEngine : GlideLearning {
         unigrams.merge(word, 1, Int::plus)
         ngram.getNthPrevWord(1)?.toString()?.lowercase()?.let { bigrams.merge("$it\t$word", 1, Int::plus) }
         // new words become swipeable in the matching script
-        val lang = if (word.any { it in 'а'..'я' || it == 'ё' }) "ru" else "en"
-        lexicons[lang]?.let { if (!it.contains(word)) synchronized(it) { it.add(word, 1) } }
+        lexicons[learnLang(word)]?.let { if (!it.contains(word)) synchronized(it) { it.add(word, 1) } }
         // adapt to the user's gesture style: average offset of start/end points to the chosen word's keys
         val dec = lastDecoder
         if (dec != null && lastCandidates.any { it.word == word }) {
@@ -211,8 +223,7 @@ object GlideEngine : GlideLearning {
             }
         }
         unigrams.keys.forEach { w ->
-            val lang = if (w.any { it in 'а'..'я' || it == 'ё' }) "ru" else "en"
-            lexicons[lang]?.let { if (!it.contains(w)) synchronized(it) { it.add(w, 1) } }
+            lexicons[learnLang(w)]?.let { if (!it.contains(w)) synchronized(it) { it.add(w, 1) } }
         }
         save()
     }

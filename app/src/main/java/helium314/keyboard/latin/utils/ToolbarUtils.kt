@@ -137,9 +137,10 @@ val defaultToolbarPref by lazy {
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }
 }
 
-val defaultPinnedToolbarPref = entries.filterNot { it == CLOSE_HISTORY }.joinToString(Separators.ENTRY) {
-    it.name + Separators.KV + false
-}
+/** Klaviatura 1.4.0: main keys are always visible on the suggestion strip (no need to open the toolbar) */
+val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE)
+val defaultPinnedToolbarPref = (defaultPinnedKeys + entries.filterNot { it == CLOSE_HISTORY || it in defaultPinnedKeys })
+    .joinToString(Separators.ENTRY) { it.name + Separators.KV + (it in defaultPinnedKeys) }
 
 val defaultClipboardToolbarPref by lazy {
     val default = listOf(CLEAR_CLIPBOARD, UP, DOWN, LEFT, RIGHT, UNDO, CUT, COPY, PASTE, SELECT_WORD, CLOSE_HISTORY)

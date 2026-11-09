@@ -356,7 +356,12 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
 
     private void registerPress(final Key key) {
         // Do not trigger key-down effect right now in case this is actually a fling action.
-        mPendingKeyDown = () -> callListenerOnPressKey(key);
+        mPendingKeyDown = () -> {
+            callListenerOnPressKey(key);
+            // Klaviatura 1.4.0: the emoji is held -> from now on the finger belongs to us (swipe over several emojis);
+            // before, the scrolling parent stole the gesture as soon as the finger moved a few pixels
+            disallowParentInterceptTouchEvent(true);
+        };
         mHandler.postDelayed(mPendingKeyDown, KEY_PRESS_DELAY_TIME);
     }
 
@@ -465,7 +470,9 @@ public final class EmojiPageKeyboardView extends KeyboardView implements
             final Key prev = mCurrentKey;
             final long now = e.getEventTime();
             // first emoji was already shown as pressed (held >= KEY_PRESS_DELAY_TIME) -> start swipe mode
-            if (!mSwipeMode && prev != null && mPendingKeyDown == null && !isShowingPopupKeysPanel()) {
+            // (1.4.0: also when only the description bubble is shown after a long hold, which blocked swiping before)
+            if (!mSwipeMode && prev != null && mPendingKeyDown == null) {
+                if (isShowingPopupKeysPanel()) dismissPopupKeysPanel();
                 mSwipeMode = true;
                 disallowParentInterceptTouchEvent(true);
                 cancelLongPress();

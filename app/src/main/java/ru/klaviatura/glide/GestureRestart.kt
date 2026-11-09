@@ -86,6 +86,7 @@ object ProperNouns {
     fun case(w: String, prev: String? = null): String {
         if (w.isEmpty() || w[0].isUpperCase()) return w
         val l = w.lowercase()
+        if (l == "i" || l.startsWith("i'")) return w.replaceFirstChar { it.uppercaseChar() } // English I, I'm, I'll
         if (l in forms) return w.replaceFirstChar { it.uppercaseChar() }
         if (l in AMBIGUOUS && prev != null) {
             val p = prev.lowercase().trim { !it.isLetter() }

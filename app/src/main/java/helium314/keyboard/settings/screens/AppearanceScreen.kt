@@ -71,7 +71,6 @@ fun AppearanceScreen(
         SettingsWithoutKey.BACKGROUND_IMAGE,
         SettingsWithoutKey.BACKGROUND_IMAGE_LANDSCAPE,
         "kl_bg_gen",
-        "kl_ai_bg",
         ru.klaviatura.bg.BgFx.PREF_BLUR,
         ru.klaviatura.bg.BgFx.PREF_DIM,
         "kl_reset_theme",
@@ -243,12 +242,6 @@ fun createAppearanceSettings(context: Context) = listOf(
         val ctx = LocalContext.current
         helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
             ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.bg.BgGenerateActivity::class.java))
-        })
-    },
-    Setting(context, "kl_ai_bg", R.string.kl_ai_bg, R.string.kl_ai_bg_summary) { s ->
-        val ctx = LocalContext.current
-        helium314.keyboard.settings.preferences.Preference(name = s.title, description = s.description, onClick = {
-            ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.bg.AiBackgroundActivity::class.java))
         })
     },
     Setting(context, ru.klaviatura.bg.BgFx.PREF_BLUR, R.string.kl_bg_blur) { setting ->

@@ -7,6 +7,7 @@ package helium314.keyboard.keyboard.emoji
 
 import android.content.res.Resources
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.viewpager2.widget.ViewPager2
 import helium314.keyboard.keyboard.internal.KeyboardParams
@@ -42,11 +43,28 @@ internal class EmojiLayoutParams(res: Resources) {
         emojiKeyboardHeight = emojiListHeight - emojiCategoryPageIdViewHeight - emojiListBottomMargin
     }
 
-    fun setEmojiListProperties(vp: ViewPager2) {
-        val lp = vp.layoutParams as LinearLayout.LayoutParams
-        lp.height = emojiKeyboardHeight
-        lp.bottomMargin = emojiListBottomMargin
-        vp.layoutParams = lp
+    fun setEmojiListProperties(vp: ViewPager2) = applyListHeight(vp, emojiKeyboardHeight, emojiListBottomMargin)
+
+    companion object {
+        /**
+         * Klaviatura 1.4.0 crash fix: the GIF panel wraps the pager into a FrameLayout, so on the second opening of the
+         * emoji palette the pager no longer has LinearLayout params (ClassCastException -> keyboard crash).
+         * The height is applied to whichever view is the direct child of the LinearLayout.
+         */
+        @JvmStatic
+        fun applyListHeight(vp: View, height: Int, bottomMargin: Int) {
+            var target: View = vp
+            while (target.layoutParams !is LinearLayout.LayoutParams) {
+                val parent = target.parent as? View ?: break
+                // the pager itself fills its wrapper
+                target.layoutParams?.let { it.height = ViewGroup.LayoutParams.MATCH_PARENT; target.layoutParams = it }
+                target = parent
+            }
+            val lp = target.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            lp.height = height
+            lp.bottomMargin = bottomMargin
+            target.layoutParams = lp
+        }
     }
 
     fun setCategoryPageIdViewProperties(v: View) {

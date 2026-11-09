@@ -24,7 +24,7 @@ object Profanity {
         refresh()
         thread(name = "kl-profanity") {
             val s = HashSet<String>()
-            for (l in listOf("ru", "en")) try {
+            for (l in listOf("ru", "en", "pl", "uk", "de")) try {
                 ctx!!.assets.open("glide/blocked_$l.txt").bufferedReader().useLines { ls -> ls.forEach { if (it.isNotBlank()) s.add(it.trim()) } }
             } catch (e: Throwable) { }
             words = s

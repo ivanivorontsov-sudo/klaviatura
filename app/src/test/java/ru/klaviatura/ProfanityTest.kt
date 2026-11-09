@@ -90,7 +90,7 @@ class ProfanityTest {
 
     @Test fun byteLexiconRoundTrip() {
         val l = ru.klaviatura.glide.Lexicon.parse("x", sequenceOf("ёлка\t5", "Москва\t3", "hello\t2", "café\t1"))
-        assertEquals(listOf("ёлка", "Москва", "hello"), l.words.toList()); assertTrue(l.contains("ёлка")); assertFalse(l.contains("елка"))
+        assertEquals(listOf("ёлка", "Москва", "hello", "café"), l.words.toList()); assertTrue("1.4.0: any alphabet", l.contains("café")); assertTrue(l.contains("ёлка")); assertFalse(l.contains("елка"))
     }
 
     @Test fun screenshotPaths() {

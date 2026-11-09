@@ -46,6 +46,7 @@ fun GestureTypingScreen(
         ru.klaviatura.voice.VoiceInput.PREF_MIXED,
         "kl_voice_import",
         ru.klaviatura.voice.VoiceInput.PREF_COMMANDS,
+        ru.klaviatura.voice.VoiceInput.PREF_SILENCE_S,
         ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK,
         if (gestureEnabled)
             Settings.PREF_GESTURE_PREVIEW_TRAIL else null,
@@ -105,6 +106,18 @@ fun createGestureTypingSettings(context: Context) = listOf(
             description = {
                 if (it < ru.klaviatura.glide.GestureRestart.MIN_HOLD_MS) stringResource(R.string.kl_swipe_hold_restart_off)
                 else stringResource(R.string.abbreviation_unit_milliseconds, it.toString())
+            }
+        )
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_SILENCE_S, R.string.kl_voice_silence) { def ->
+        SliderPreference(
+            name = def.title,
+            key = def.key,
+            default = ru.klaviatura.voice.VoiceInput.DEFAULT_SILENCE_S,
+            range = 5f..ru.klaviatura.voice.VoiceInput.SILENCE_NEVER.toFloat(),
+            description = {
+                if (it >= ru.klaviatura.voice.VoiceInput.SILENCE_NEVER) stringResource(R.string.kl_voice_silence_never)
+                else stringResource(R.string.kl_voice_silence_value, it)
             }
         )
     },

@@ -42,6 +42,12 @@ object Screenshots {
             n.startsWith("screenshot") || n.startsWith("скриншот") || n.startsWith("screen_") || n.startsWith("scr_")
     }
 
+    private const val OFFERED_AT = "kl_clip_perm_offered_at"
+    /** strip hint «allow screenshots»: when enabled but not granted, at most once in 3 days */
+    fun shouldOfferPermission(ctx: Context): Boolean = enabled(ctx) && !granted(ctx) &&
+        System.currentTimeMillis() - ctx.prefs().getLong(OFFERED_AT, 0) > 3 * 24 * 3600_000L
+    fun markOffered(ctx: Context) = ctx.prefs().edit().putLong(OFFERED_AT, System.currentTimeMillis()).apply()
+
     /** settings opened: ask once for the gallery permission (an IME cannot show the dialog itself) */
     fun askOnceFromSettings(activity: Activity) {
         val prefs = activity.prefs()
@@ -97,7 +103,6 @@ class MediaPermissionActivity : Activity() {
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         val ok = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        if (!ok) prefs().edit().putBoolean(Screenshots.PREF, false).apply()
         Toast.makeText(this, if (ok) "Свежие скриншоты будут появляться в буфере клавиатуры" else "Без доступа к фото скриншоты не попадут в буфер", Toast.LENGTH_LONG).show()
         finish()
     }
