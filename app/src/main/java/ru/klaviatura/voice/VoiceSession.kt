@@ -100,6 +100,22 @@ object VoiceText {
         return words.joinToString(" ").replace(Regex(" ([,.!?:;])"), "$1").replace(" \n ", "\n").trim()
     }
 
+    /**
+     * Voice partials are cumulative. Once a user edits the text, that spoken prefix is already
+     * committed and must not be inserted again when the recognizer sends the full phrase next time.
+     */
+    fun afterCommittedPrefix(raw: String, committedPrefix: String): String {
+        val text = raw.trim()
+        val prefix = committedPrefix.trim()
+        if (prefix.isEmpty()) return raw
+        if (text.startsWith(prefix, ignoreCase = true)
+            && (text.length == prefix.length || text[prefix.length].isWhitespace())) {
+            return text.substring(prefix.length).trimStart()
+        }
+        val committedWords = prefix.split(Regex("\\s+")).size
+        return text.split(Regex("\\s+")).drop(committedWords).joinToString(" ")
+    }
+
     /** proper nouns (Москвы, Ивану) and the first word after . ! ? or a new line; the very first word is handled by the editor side */
     fun capitalize(words: List<String>): List<String> {
         var start = false
