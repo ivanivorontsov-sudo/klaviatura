@@ -1,5 +1,9 @@
 name: release
-on: { push: { tags: ['v*'] }, workflow_dispatch: {} }
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch: {}
 permissions: { contents: write }
 jobs:
   build:
@@ -15,6 +19,28 @@ jobs:
         env: { KS_FILE: "${{ runner.temp }}/ks.jks", KS_PASS: "${{ secrets.KS_PASS }}", KS_ALIAS: klaviatura, KLIPY_KEY: "${{ secrets.KLIPY_KEY }}" }
       - name: Release sanity (R8 kept JNI fields)
         run: python3 ci/check_jni_fields.py app/build/outputs/apk/release/*.apk libs-dl/sherpa-onnx-*.aar
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with: { files: app/build/outputs/apk/release/*.apk }
+      - name: Publish release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref == 'refs/heads/main' && 'v1.4.2' || github.ref_name }}
+          target_commitish: main
+          name: Клавиатура 1.4.2
+          body: |
+            ## Клавиатура 1.4.2
+            - Исправлено зависание при импорте скриншотов и изображений из буфера.
+            - Исправлено повторное появление закрытого/скрытого предпросмотра.
+            - APK собран с release-подписью; перед публикацией выполняются unit-тесты и проверка JNI.
+          files: app/build/outputs/apk/release/*.apk
+      - name: Remove superseded releases
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          keep_tag="v1.4.2"
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            [ "$tag" = "$keep_tag" ] && continue
+            gh release delete "$tag" --yes --cleanup-tag
+          done < <(gh release list --limit 100 --json tagName --jq '.[].tagName')
