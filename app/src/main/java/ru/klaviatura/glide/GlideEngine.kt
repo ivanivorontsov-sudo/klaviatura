@@ -57,12 +57,29 @@ object GlideEngine : GlideLearning {
         try { lms[lang] = ctx.assets.open("glide/${lang}_bigrams.tsv").bufferedReader().useLines { BigramLM.parse(it) } } catch (e: Exception) { }
     }
 
-    /** next-word predictions from user bigrams first, then the base LM */
+    private val HELP_FORMS = setOf("помощь", "помощи", "помощью", "помощей", "помощам", "помощами", "помощах")
+    private val CURATED_NEXT_WORDS = mapOf(
+        "спиртовой" to listOf("салфеткой", "салфетка"),
+        "спиртовая" to listOf("салфетка", "салфеткой"),
+        "спиртовые" to listOf("салфетки", "салфетками"),
+        "спиртовыми" to listOf("салфетками", "салфетки")
+    )
+    private val RU_SPECIAL_WORDS = """спиртовой спиртового спиртовому спиртовым спиртовом спиртовая спиртовой спиртовую спиртовою спиртовое спиртовые спиртовых спиртовым спиртовыми салфетка салфетки салфетке салфетку салфеткой салфеткою салфеток салфеткам салфетками салфетках""".split(' ').toSet()
+
+    /** Prevent a spurious corpus association from turning «помощь» into an unwanted political continuation. */
+    internal fun isUnwantedHelpUkrainePair(previous: String, next: String): Boolean {
+        val p = previous.lowercase(Locale.ROOT).replace('ё', 'е')
+        val w = next.lowercase(Locale.ROOT).replace('ё', 'е')
+        return p in HELP_FORMS && w == "украине"
+    }
+
+    /** next-word predictions: curated common phrases, then user bigrams, then the base LM */
     fun predictNext(prev: String, n: Int = 3): List<String> {
-        val p = prev.lowercase()
-        val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
+        val p = prev.lowercase(Locale.ROOT).replace('ё', 'е')
+        val curated = CURATED_NEXT_WORDS[p].orEmpty()
+        val user = bigrams.entries.filter { it.key.startsWith("$p\\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\\t') }
         val base = lms.values.flatMap { it.next(p, n) }
-        return (user + base).filter { !isForgotten(it) }.distinct().take(n)
+        return (curated + user + base).filter { !isForgotten(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
 
     private fun loadLexicon(lang: String): Lexicon? {
@@ -70,6 +87,8 @@ object GlideEngine : GlideLearning {
         val ctx = appContext ?: return null
         return try {
             val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
+            // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
+            if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.add(it, 8_000L) }
             lexicons[lang] = lex
             lex
         } catch (e: Throwable) { null }
@@ -156,8 +175,9 @@ object GlideEngine : GlideLearning {
     // ---- learning (local only) ----
     override fun wordBoost(word: String): Double = unigrams[word]?.let { 0.25 * ln(1.0 + it) } ?: 0.0
     override fun bigramBoost(prev: String?, word: String): Double =
-        if (prev == null) 0.0 else (bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
-            GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(prev, word) } ?: 0.0)
+        if (prev == null || isUnwantedHelpUkrainePair(prev, word)) 0.0 else
+            (bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
+                GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(prev, word) } ?: 0.0)
     override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
 
     /** called for every committed word (typed, swiped or picked from suggestions) */
