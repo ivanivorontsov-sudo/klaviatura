@@ -555,6 +555,16 @@ public class LatinIME extends InputMethodService implements
             ic.setComposingText(text, 1);
             composing = !text.isEmpty();
         }
+        @Override public void finishPartialForManualEdit() {
+            if (!composing) return;
+            final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
+            if (ic != null) ic.finishComposingText();
+            composing = false;
+            // Keep the editor/IME selection cache aligned before the next manual key is processed.
+            mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(
+                    mInputLogic.mConnection.getExpectedSelectionStart(),
+                    mInputLogic.mConnection.getExpectedSelectionEnd(), false);
+        }
         @Override public void commitPhrase(@NonNull String text) {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
@@ -1155,9 +1165,16 @@ public class LatinIME extends InputMethodService implements
         // view is not displayed we have no means of showing suggestions anyway, and if it is then
         // we want to show suggestions anyway.
         if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening() || mVoiceSettling) {
-            // root cause of «один ты четыреты ты ты ты…»: the keyboard's own input logic reacted to the
-            // voice edits (restarting suggestions on the touched word and re-composing it), mixing its stale
-            // word with the voice text. While voice is active only the voice pipeline edits the text.
+            // Voice-owned composing updates keep the caret at the end of their composing span.
+            // A selection outside that span is a manual cursor/selection change: freeze the current
+            // partial in place so subsequent speech starts at the new caret instead of moving old text.
+            final boolean selectionChanged = oldSelStart != newSelStart || oldSelEnd != newSelEnd;
+            final boolean caretAtVoicePartialEnd = composingSpanStart >= 0
+                    && newSelStart == composingSpanEnd && newSelEnd == composingSpanEnd;
+            if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()
+                    && selectionChanged && !caretAtVoicePartialEnd) {
+                mVoiceTarget.finishPartialForManualEdit();
+            }
             mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
             return;
         }
@@ -1517,6 +1534,8 @@ public class LatinIME extends InputMethodService implements
             }
             mRichImm.switchToShortcutIme(this);
         }
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening())
+            mVoiceTarget.finishPartialForManualEdit();
         final InputTransaction completeInputTransaction =
                 mInputLogic.onCodeInput(mSettings.getCurrent(), event,
                         mKeyboardSwitcher.getKeyboardCapsMode(),
@@ -1527,6 +1546,8 @@ public class LatinIME extends InputMethodService implements
 
     public void onTextInput(@Nullable String rawText) {
         if (rawText == null) return;
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening())
+            mVoiceTarget.finishPartialForManualEdit();
         // TODO: have the keyboard pass the correct key code when we need it.
         Event event = Event.createSoftwareTextEvent(rawText, KeyCode.MULTIPLE_CODE_POINTS, null);
         InputTransaction completeInputTransaction = mInputLogic.onTextInput(mSettings.getCurrent(),
@@ -1539,6 +1560,12 @@ public class LatinIME extends InputMethodService implements
     public void onStartBatchInput() {
         mInputLogic.onStartBatchInput(mSettings.getCurrent(), mKeyboardSwitcher, mHandler);
         mGestureConsumer.onGestureStarted(mRichImm.getCurrentSubtypeLocale(), mKeyboardSwitcher.getKeyboard());
+    }
+
+    /** Keeps voice dictation active while allowing the user to type or edit at the current caret. */
+    public void finishVoiceCompositionForManualEdit() {
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening())
+            mVoiceTarget.finishPartialForManualEdit();
     }
 
     public void onUpdateBatchInput(final InputPointers batchPointers) {
