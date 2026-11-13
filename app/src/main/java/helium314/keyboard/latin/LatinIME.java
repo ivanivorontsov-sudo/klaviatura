@@ -572,6 +572,8 @@ public class LatinIME extends InputMethodService implements
         @Override public void commitPhrase(@NonNull String text) {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
+            // If the user typed since the last voice partial, commit that composing word first.
+            if (!composing) mInputLogic.finishInput();
             ic.beginBatchEdit();
             if (composing) { ic.setComposingText("", 1); composing = false; }
             CharSequence before = ic.getTextBeforeCursor(2, 0); // read AFTER removing the partial
