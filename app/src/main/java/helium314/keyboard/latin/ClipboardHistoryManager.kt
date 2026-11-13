@@ -48,14 +48,24 @@ class ClipboardHistoryManager(
     private var tempPrimaryClip = false
 
     private var screenshotObserver: android.database.ContentObserver? = null
+    // MediaStore can be slow on vendor ROMs; never scan it on the keyboard's UI thread.
+    private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
+    private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboardManager.addPrimaryClipChangedListener(this)
         clipboardDao = ClipboardDao.getInstance(latinIME)
         try {
-            screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, android.os.Handler(android.os.Looper.getMainLooper())) { uri, ts, desc ->
-                if (latinIME.mSettings.current.mClipboardHistoryEnabled) { clipboardDao?.addClipUri(ts, false, uri, desc, latinIME); refreshStripForImage() } }
+            screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, screenshotHandler) { uri, ts, desc ->
+                mainHandler.post {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                        clipboardDao?.addClipUri(ts, false, uri, desc, latinIME)
+                        refreshStripForImage()
+                    }
+                }
+            }
         } catch (e: Throwable) { }
         if (latinIME.mSettings.current.mClipboardHistoryEnabled)
             fetchPrimaryClip()
@@ -71,12 +81,21 @@ class ClipboardHistoryManager(
     fun onStartInputView() {
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
         fetchPrimaryClip()
-        ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc -> clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) }
+        screenshotHandler.post {
+            ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
+                mainHandler.post {
+                    if (latinIME.mSettings.current.mClipboardHistoryEnabled)
+                        clipboardDao?.addClipUri(ts, false, uri, desc, latinIME)
+                }
+            }
+        }
     }
 
     fun onDestroy() {
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
+        screenshotHandler.removeCallbacksAndMessages(null)
+        screenshotWorker.quitSafely()
     }
 
     override fun onPrimaryClipChanged() {
@@ -222,7 +241,10 @@ class ClipboardHistoryManager(
     fun recentImageEntry(now: Long = System.currentTimeMillis()): ClipboardHistoryEntry? =
         clipboardDao?.getAll()?.filter { it.filename != null && it.mimeTypes?.any { m -> m.startsWith("image/") } == true }
             ?.maxByOrNull { it.timeStamp }
-            ?.takeIf { now - it.timeStamp in -60_000L..RECENT_IMAGE_MILLIS && it.id != dismissedImageId }
+            ?.takeIf {
+                now - it.timeStamp in -60_000L..RECENT_IMAGE_MILLIS &&
+                    it.timeStamp > latinIME.prefs().getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
+            }
 
     private fun recentImageSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup): View? {
         val inputType = editorInfo?.inputType ?: InputType.TYPE_NULL
@@ -250,15 +272,16 @@ class ClipboardHistoryManager(
         textView.layoutParams = (textView.layoutParams as android.widget.LinearLayout.LayoutParams).apply { width = ViewGroup.LayoutParams.WRAP_CONTENT; weight = 0f }
         textView.text = if (entry.text?.contains("Скрин") == true) "Скриншот" else "Картинка"
         val onClick = View.OnClickListener {
-            dismissedImageId = entry.id
+            dismissImageSuggestion(entry)
             try { latinIME.mKeyboardActionListener.onContent(entry.getContentInfo(latinIME)) } catch (e: Exception) { Log.w(TAG, "paste image", e) }
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
             binding.root.isGone = true
             latinIME.setNeutralSuggestionStrip()
+            latinIME.mHandler.postResumeSuggestions(false)
         }
         imageView.setOnClickListener(onClick)
         textView.setOnClickListener(onClick)
-        styleSuggestion(binding, textView) { dismissedImageId = entry.id; removeClipboardSuggestion(suppressPrimary = false) }
+        styleSuggestion(binding, textView) { dismissImageSuggestion(entry); removeClipboardSuggestion(suppressPrimary = false) }
         clipboardSuggestionView = binding.root
         return clipboardSuggestionView
     }
@@ -278,6 +301,11 @@ class ClipboardHistoryManager(
         styleSuggestion(binding, textView) { ru.klaviatura.clip.Screenshots.markOffered(latinIME); removeClipboardSuggestion(suppressPrimary = false) }
         clipboardSuggestionView = binding.root
         return clipboardSuggestionView
+    }
+
+    private fun dismissImageSuggestion(entry: ClipboardHistoryEntry) {
+        // Persist dismissal so a restarted IME does not re-offer the same recent image.
+        latinIME.prefs().edit().putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, entry.timeStamp).apply()
     }
 
     private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
@@ -374,7 +402,7 @@ class ClipboardHistoryManager(
         // avoid showing the current suggestion because it has been dismissed or pasted
         private var dontShowCurrentSuggestion: Boolean = false
         /** image suggestion that was pasted or dismissed */
-        private var dismissedImageId: Long = -1
+        private const val PREF_DISMISSED_IMAGE_TIMESTAMP = "kl_clip_dismissed_image_timestamp"
         const val RECENT_IMAGE_MILLIS = 10 * 60 * 1000L
 
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)
