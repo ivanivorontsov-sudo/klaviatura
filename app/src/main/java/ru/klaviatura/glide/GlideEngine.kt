@@ -88,7 +88,7 @@ object GlideEngine : GlideLearning {
         return try {
             val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
             // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
-            if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.add(it, 8_000L) }
+            if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
             lexicons[lang] = lex
             lex
         } catch (e: Throwable) { null }
