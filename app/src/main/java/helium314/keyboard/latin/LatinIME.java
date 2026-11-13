@@ -551,6 +551,10 @@ public class LatinIME extends InputMethodService implements
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
             if (text.isEmpty() && !composing) return;
+            // Manual keyboard input may have opened its own composing region after the user edited
+            // the text. Commit that word before voice starts a new composing region, otherwise the
+            // next partial could replace the manually typed word.
+            if (!composing && !text.isEmpty()) mInputLogic.finishInput();
             // partial text REPLACES the previous partial (composing region), it is never appended
             ic.setComposingText(text, 1);
             composing = !text.isEmpty();
