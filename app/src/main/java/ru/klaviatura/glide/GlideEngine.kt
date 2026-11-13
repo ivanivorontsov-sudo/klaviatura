@@ -77,7 +77,7 @@ object GlideEngine : GlideLearning {
     fun predictNext(prev: String, n: Int = 3): List<String> {
         val p = prev.lowercase(Locale.ROOT).replace('ё', 'е')
         val curated = CURATED_NEXT_WORDS[p].orEmpty()
-        val user = bigrams.entries.filter { it.key.startsWith("$p\\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\\t') }
+        val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
         val base = lms.values.flatMap { it.next(p, n) }
         return (curated + user + base).filter { !isForgotten(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
