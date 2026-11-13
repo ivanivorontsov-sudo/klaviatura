@@ -67,7 +67,7 @@ jobs:
       - name: Upload signed update APK
         uses: actions/upload-artifact@v4
         with:
-          name: Klaviatura-update-v1.4.1
+          name: Klaviatura-update-v1.4.2
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
