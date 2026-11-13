@@ -35,6 +35,12 @@ class VoiceSessionTest {
         assertEquals(listOf("один", "один два", "один два три"), ed.partials.filter { it.isNotEmpty() })
     }
 
+    @Test fun cumulativePartialsDoNotRepeatManuallyFrozenPrefix() {
+        assertEquals("салфеткой", VoiceText.afterCommittedPrefix("спиртовой салфеткой", "спиртовой"))
+        assertEquals("салфеткой", VoiceText.afterCommittedPrefix("СПИРТОВОЙ салфеткой", "спиртовой"))
+        assertEquals("", VoiceText.afterCommittedPrefix("спиртовой", "спиртовой"))
+    }
+
     @Test fun noiseLoopIsRemoved() {
         val ed = Ed()
         val s = VoiceSession(listOf("ru" to Fake(listOf(
