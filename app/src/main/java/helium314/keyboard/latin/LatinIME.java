@@ -547,23 +547,35 @@ public class LatinIME extends InputMethodService implements
 
     private final ru.klaviatura.voice.VoiceTarget mVoiceTarget = new ru.klaviatura.voice.VoiceTarget() {
         private boolean composing = false;
+        private String lastRawPartial = "";
+        private String frozenPrefix = "";
         @Override public void showPartial(@NonNull String text) {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic == null) return;
-            if (text.isEmpty() && !composing) return;
+            lastRawPartial = text;
+            String partial = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
+            if (partial.isEmpty() && !composing) return;
             // Manual keyboard input may have opened its own composing region after the user edited
             // the text. Commit that word before voice starts a new composing region, otherwise the
             // next partial could replace the manually typed word.
-            if (!composing && !text.isEmpty()) mInputLogic.finishInput();
-            // partial text REPLACES the previous partial (composing region), it is never appended
-            ic.setComposingText(text, 1);
-            composing = !text.isEmpty();
+            if (!composing && !partial.isEmpty()) mInputLogic.finishInput();
+            // The recognizer reports the whole phrase, but the user may have committed an earlier
+            // prefix while moving the caret. Keep only the new suffix and separate it from the text.
+            if (!partial.isEmpty() && !frozenPrefix.isEmpty()) {
+                CharSequence before = ic.getTextBeforeCursor(1, 0);
+                if (before != null && before.length() > 0 && !Character.isWhitespace(before.charAt(before.length() - 1)))
+                    partial = " " + partial;
+            }
+            // partial REPLACES only the current suffix composition; frozen spoken text stays intact.
+            ic.setComposingText(partial, 1);
+            composing = !partial.isEmpty();
         }
         @Override public void finishPartialForManualEdit() {
             if (!composing) return;
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic != null) ic.finishComposingText();
             composing = false;
+            frozenPrefix = lastRawPartial;
             // Keep the editor/IME selection cache aligned before the next manual key is processed.
             mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(
                     mInputLogic.mConnection.getExpectedSelectionStart(),
@@ -577,19 +589,23 @@ public class LatinIME extends InputMethodService implements
             ic.beginBatchEdit();
             if (composing) { ic.setComposingText("", 1); composing = false; }
             CharSequence before = ic.getTextBeforeCursor(2, 0); // read AFTER removing the partial
-            String t = text;
+            String t = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
             boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
                     || before.toString().trim().matches(".*[.!?]$");
             if (sentenceStart && !t.isEmpty() && Character.isLetter(t.charAt(0)))
                 t = Character.toUpperCase(t.charAt(0)) + t.substring(1);
             if (before != null && before.length() > 0 && !Character.isWhitespace(before.charAt(before.length() - 1))
                     && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0))) t = " " + t;
-            ic.commitText(t, 1);
+            if (!t.isEmpty()) ic.commitText(t, 1);
             ic.endBatchEdit();
+            lastRawPartial = "";
+            frozenPrefix = "";
         }
         @Override public void endVoice() {
             final android.view.inputmethod.InputConnection ic = getCurrentInputConnection();
             if (ic != null && composing) { ic.finishComposingText(); composing = false; }
+            lastRawPartial = "";
+            frozenPrefix = "";
             // voice wrote directly into the editor: resync the IME's text cache so it doesn't re-insert stale words
             mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(
                     mInputLogic.mConnection.getExpectedSelectionStart(), mInputLogic.mConnection.getExpectedSelectionEnd(), false);
