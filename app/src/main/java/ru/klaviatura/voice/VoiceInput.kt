@@ -274,6 +274,8 @@ object VoiceInput {
 interface VoiceTarget {
     fun showPartial(text: String)
     fun commitPhrase(text: String)
+    /** Freeze the current partial before the user types or moves the caret. */
+    fun finishPartialForManualEdit()
     fun endVoice()
 }
 
