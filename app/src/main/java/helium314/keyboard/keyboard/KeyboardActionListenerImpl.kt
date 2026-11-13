@@ -91,6 +91,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         }
 
         if (event.isHandled) {
+            latinIME.finishVoiceCompositionForManualEdit()
             inputLogic.onCodeInput(
                 settings.current, event,
                 keyboardSwitcher.getKeyboardCapsMode(), // TODO: this is not necessarily correct for a hardware keyboard right now
@@ -154,6 +155,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     override fun onTextInput(text: String?) = latinIME.onTextInput(text)
 
     override fun onContent(content: InputContentInfoCompat) {
+        latinIME.finishVoiceCompositionForManualEdit()
         val editorInfo = latinIME.currentInputEditorInfo
         val editorMimeTypes = EditorInfoCompat.getContentMimeTypes(editorInfo)
         if (editorMimeTypes.any { content.description.hasMimeType(it) }) {
@@ -252,6 +254,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     }
 
     override fun onMoveDeletePointer(steps: Int) {
+        latinIME.finishVoiceCompositionForManualEdit()
         inputLogic.finishInput()
         val end = connection.expectedSelectionEnd
         val actualSteps = actualSteps(steps)
