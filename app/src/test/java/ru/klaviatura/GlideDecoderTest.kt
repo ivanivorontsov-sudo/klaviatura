@@ -79,6 +79,19 @@ class GlideDecoderTest {
         assertTop("сегодня", r)
     }
 
+    @Test fun curatedRussianWordsCanBeAddedAndBoosted() {
+        val lex = Lexicon("ru")
+        listOf("спиртовой", "спиртовая", "салфетка", "салфеткой").forEach { lex.addOrBoost(it, 8_000L) }
+        assertTrue(lex.contains("спиртовой"))
+        assertTrue(lex.contains("спиртовая"))
+        assertTrue(lex.contains("салфетка"))
+        assertTrue(lex.contains("салфеткой"))
+        val index = lex.indexOf("спиртовой")
+        val beforeBoost = lex.logf[index]
+        lex.addOrBoost("спиртовой", 100_000L)
+        assertTrue(lex.logf[index] > beforeBoost)
+    }
+
     @Test fun typicalRussianWords() {
         for (w in listOf("привет", "спасибо", "хорошо", "сегодня", "работа", "когда", "только", "может", "человек", "дома"))
             assertTop(w, decode(jcuken, wordPoints(jcuken, w), listOf(ru to 0.0, en to 0.3)), 2)
