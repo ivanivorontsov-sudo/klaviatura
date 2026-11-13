@@ -258,7 +258,7 @@ class ClipboardHistoryManager(
         }
         imageView.setOnClickListener(onClick)
         textView.setOnClickListener(onClick)
-        styleSuggestion(binding, textView) { dismissedImageId = entry.id; removeClipboardSuggestion() }
+        styleSuggestion(binding, textView) { dismissedImageId = entry.id; removeClipboardSuggestion(suppressPrimary = false) }
         clipboardSuggestionView = binding.root
         return clipboardSuggestionView
     }
@@ -275,7 +275,7 @@ class ClipboardHistoryManager(
             try { latinIME.startActivity(android.content.Intent(latinIME, ru.klaviatura.clip.MediaPermissionActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
         }
-        styleSuggestion(binding, textView) { ru.klaviatura.clip.Screenshots.markOffered(latinIME); removeClipboardSuggestion() }
+        styleSuggestion(binding, textView) { ru.klaviatura.clip.Screenshots.markOffered(latinIME); removeClipboardSuggestion(suppressPrimary = false) }
         clipboardSuggestionView = binding.root
         return clipboardSuggestionView
     }
@@ -357,8 +357,8 @@ class ClipboardHistoryManager(
         return clipboardSuggestionView
     }
 
-    private fun removeClipboardSuggestion() {
-        dontShowCurrentSuggestion = true
+    private fun removeClipboardSuggestion(suppressPrimary: Boolean = true) {
+        if (suppressPrimary) dontShowCurrentSuggestion = true
         val csv = clipboardSuggestionView ?: return
         if (csv.parent != null && !csv.isGone) {
             // clipboard view is shown ->
