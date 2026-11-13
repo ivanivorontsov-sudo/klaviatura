@@ -77,6 +77,19 @@ class Lexicon(val lang: String) {
     fun contains(w: String) = find(w) >= 0
     fun indexOf(w: String) = find(w)
 
+    /** Add a domain word, or raise an existing form's frequency so it is not buried by corpus noise. */
+    fun addOrBoost(word: String, count: Long) {
+        if (word.isEmpty()) return
+        val value = ln(1.0 + count).toFloat()
+        val existing = find(word)
+        if (existing >= 0) {
+            if (value > lf[existing]) lf[existing] = value
+            maxLog = max(maxLog, value)
+        } else {
+            add(word, count)
+        }
+    }
+
     fun add(word: String, count: Long) {
         if (word.isEmpty() || find(word) >= 0) return
         for (c in word) if (codeOrAdd(c) == 0) return
