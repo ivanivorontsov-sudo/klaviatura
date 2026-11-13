@@ -1,6 +1,16 @@
 name: Build debug APK
 
 on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - '.github/workflows/build-debug-apk.yml'
   workflow_dispatch:
 
 jobs:
@@ -21,6 +31,9 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew testRunTestsUnitTest
 
       - name: Build with Gradle
         run: ./gradlew assembleDebug
