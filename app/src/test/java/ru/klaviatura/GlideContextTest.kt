@@ -1,5 +1,6 @@
 package ru.klaviatura
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.klaviatura.GlideCorpusTest.Companion.lex
@@ -9,6 +10,7 @@ import ru.klaviatura.GlideDecoderTest.Companion.path
 import ru.klaviatura.glide.BigramLM
 import ru.klaviatura.glide.GlideDecoder
 import ru.klaviatura.glide.GlideLearning
+import ru.klaviatura.glide.GlideEngine
 import java.io.File
 import kotlin.random.Random
 
@@ -25,6 +27,15 @@ class GlideContextTest {
         override fun isForgotten(word: String) = false
         override val biasX = 0f
         override val biasY = 0f
+    }
+
+    @Test fun unwantedUkraineContinuationIsFilteredAfterHelpForms() {
+        val forms = listOf("помощь", "помощи", "помощью", "помощей", "помощам", "помощами", "помощах")
+        forms.forEach { form ->
+            assertTrue("$form should not predict Украине", GlideEngine.isUnwantedHelpUkrainePair(form, "Украине"))
+            assertFalse("$form should not block unrelated words", GlideEngine.isUnwantedHelpUkrainePair(form, "Украина"))
+        }
+        assertFalse(GlideEngine.isUnwantedHelpUkrainePair("здоровье", "Украине"))
     }
 
     @Test fun contextFixesAmbiguousSwipes() {
