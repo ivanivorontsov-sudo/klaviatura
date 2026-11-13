@@ -1,0 +1,73 @@
+name: Build signed update APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - '.github/workflows/build-update-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.klaviatura.*'
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Restore release signing key
+        run: echo "${{ secrets.KS_B64 }}" | base64 -d > "$RUNNER_TEMP/ks.jks"
+
+      - name: Build signed release APK
+        run: ./gradlew --no-daemon assembleRelease
+        env:
+          KS_FILE: ${{ runner.temp }}/ks.jks
+          KS_PASS: ${{ secrets.KS_PASS }}
+          KS_ALIAS: klaviatura
+          KLIPY_KEY: ${{ secrets.KLIPY_KEY }}
+
+      - name: Check JNI fields
+        run: python3 ci/check_jni_fields.py app/build/outputs/apk/release/*.apk libs-dl/sherpa-onnx-*.aar
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          BUILD_TOOLS="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+
+      - name: Upload signed update APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaviatura-update-v1.4.1
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
