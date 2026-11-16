@@ -64,7 +64,7 @@
             android:visibility="gone" />
         <FrameLayout
             android:id="@+id/voice_status_container"
-            android:layout_width="88dp"
+            android:layout_width="62dp"
             android:layout_height="match_parent"
             android:layout_gravity="center_vertical"
             android:layout_marginHorizontal="2dp"

@@ -571,13 +571,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     // ---- Клавиатура: recording state (red pulsing mic + «Слушаю…» + level meter, tap to stop) ----
     fun updateVoiceState(starting: Boolean, listening: Boolean, level: Float, text: String) {
-        voiceStatusActive = starting || listening
-        voiceStatusLabel.text = when {
-            starting -> "Запуск…"
-            listening -> "● Слушаю"
-            else -> ""
-        }
-        val statusColor = if (starting) 0xFFB7791F.toInt() else 0xFFE53935.toInt()
+        // The preparation chip disappears as soon as capture starts, freeing the row
+        // for dictionary suggestions. The pulsing microphone remains the recording signal.
+        voiceStatusActive = starting
+        voiceStatusLabel.text = if (starting) "Запуск…" else ""
+        val statusColor = 0xFFB7791F.toInt()
         voiceStatusLabel.background = GradientDrawable().apply {
             setColor(statusColor)
             cornerRadius = 8 * resources.displayMetrics.density

@@ -271,6 +271,7 @@ object VoiceInput {
             // Do not claim to be listening while the recorder and recognizer are still starting.
             starting = false
             refresh()
+            toast("Слушаю… говорите")
             val buf = ShortArray(1600) // 100 ms
             var lastUi = 0L
             var lastVoice = System.currentTimeMillis()
