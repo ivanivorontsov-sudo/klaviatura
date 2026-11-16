@@ -142,8 +142,20 @@ public final class InputAttributes {
     }
 
     public boolean isSameInputType(final EditorInfo editorInfo) {
-        return editorInfo.inputType == mInputType && mEditorInfo != null
-                && (mEditorInfo.imeOptions & EditorInfo.IME_FLAG_FORCE_ASCII) == (editorInfo.imeOptions & EditorInfo.IME_FLAG_FORCE_ASCII);
+        // An IME may be restarted while moving between applications whose text fields use
+        // identical inputType values. The package and editor-specific options still change:
+        // InputAttributes contains package workarounds, no-learning and private IME flags.
+        // Treating those editors as identical leaves the previous app's suggestion policy
+        // cached, which can keep suggestions disabled in every app opened afterwards.
+        final int relevantImeOptions = EditorInfo.IME_FLAG_FORCE_ASCII
+                | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+        return editorInfo != null && mEditorInfo != null
+                && editorInfo.inputType == mInputType
+                && java.util.Objects.equals(mTargetApplicationPackageName, editorInfo.packageName)
+                && mEditorInfo.fieldId == editorInfo.fieldId
+                && java.util.Objects.equals(mEditorInfo.privateImeOptions, editorInfo.privateImeOptions)
+                && (mEditorInfo.imeOptions & relevantImeOptions)
+                    == (editorInfo.imeOptions & relevantImeOptions);
     }
 
     private boolean hasNoMicrophoneKeyOption() {
