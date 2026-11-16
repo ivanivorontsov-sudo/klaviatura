@@ -202,7 +202,7 @@ class ClipboardHistoryManager(
         clipboardDao?.togglePinned(id)
     }
 
-    fun clearHistory() {
+    fun clearHistory(onComplete: (() -> Unit)? = null) {
         // Screenshot imports share one worker. Clear behind an import already in progress,
         // and cancel queued retries so an old MediaStore scan cannot repopulate the buffer.
         val generation = ++historyClearGeneration
@@ -224,6 +224,7 @@ class ClipboardHistoryManager(
                     Log.w(TAG, "clipboard clear completion failed", e)
                 } finally {
                     clearingHistory = false
+                    runCatching { onComplete?.invoke() }
                 }
             }
         }
@@ -247,6 +248,10 @@ class ClipboardHistoryManager(
     fun getHistorySize() = clipboardDao?.count() ?: 0
 
     fun getHistoryEntry(position: Int) = clipboardDao?.getAt(position)
+
+    fun getAllHistoryEntries() = clipboardDao?.getAll().orEmpty()
+
+    fun deleteHistoryEntry(id: Long) = clipboardDao?.deleteClip(id)
 
     fun getHistoryEntryContent(id: Long) = clipboardDao?.get(id)
 
