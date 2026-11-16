@@ -1238,6 +1238,10 @@ public class LatinIME extends InputMethodService implements
             if (hasSuggestionStripView() && currentSettingsValues.mAutoShowToolbar && !tryShowClipboardSuggestion()) {
                 mSuggestionStripView.setToolbarVisibility(true);
             }
+            // Re-check after the new editor connection has settled. Some apps deliver the
+            // initial cursor/selection only after the IME window is already visible.
+            // This also restores neutral predictions when the cursor is not inside a word.
+            mHandler.postResumeSuggestions(true /* let the new editor connection settle */);
         }
 
         mainKeyboardView.setMainDictionaryAvailability(mDictionaryFacilitator.hasAtLeastOneInitializedMainDictionary());
