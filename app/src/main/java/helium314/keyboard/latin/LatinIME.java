@@ -1315,6 +1315,7 @@ public class LatinIME extends InputMethodService implements
                 mInputLogic.finishInput();
                 mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
                 mVoiceTarget.afterManualEdit();
+                mHandler.postResumeSuggestions(true);
             }
             return;
         }
