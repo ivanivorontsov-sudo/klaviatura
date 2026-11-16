@@ -48,6 +48,7 @@ class ClipboardHistoryManager(
     private var tempPrimaryClip = false
 
     private var screenshotObserver: android.database.ContentObserver? = null
+    @Volatile private var destroyed = false
     // MediaStore can be slow on vendor ROMs; never scan it on the keyboard's UI thread.
     private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
     private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
@@ -59,10 +60,12 @@ class ClipboardHistoryManager(
         clipboardDao = ClipboardDao.getInstance(latinIME)
         try {
             screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, screenshotHandler) { uri, ts, desc ->
-                mainHandler.post {
-                    if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
-                        clipboardDao?.addClipUri(ts, false, uri, desc, latinIME)
-                        refreshStripForImage()
+                // Observer callbacks run on screenshotWorker: don't copy/hash images on the UI thread.
+                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                    val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
+                    if (saved) mainHandler.post {
+                        if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                            refreshStripForImage()
                     }
                 }
             }
@@ -82,19 +85,28 @@ class ClipboardHistoryManager(
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
         fetchPrimaryClip()
         screenshotHandler.post {
+            var imported = false
             ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
-                mainHandler.post {
-                    if (latinIME.mSettings.current.mClipboardHistoryEnabled)
-                        clipboardDao?.addClipUri(ts, false, uri, desc, latinIME)
+                if (destroyed || !latinIME.mSettings.current.mClipboardHistoryEnabled) false
+                else {
+                    val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
+                    imported = imported || saved
+                    saved
                 }
+            }
+            if (imported) mainHandler.post {
+                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                    refreshStripForImage()
             }
         }
     }
 
     fun onDestroy() {
+        destroyed = true
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
         screenshotHandler.removeCallbacksAndMessages(null)
+        mainHandler.removeCallbacksAndMessages(null)
         screenshotWorker.quitSafely()
     }
 
@@ -238,13 +250,22 @@ class ClipboardHistoryManager(
     }
 
     /** newest image clip of the last minutes (screenshots go only into the history, not into the primary clip) */
-    fun recentImageEntry(now: Long = System.currentTimeMillis()): ClipboardHistoryEntry? =
-        clipboardDao?.getAll()?.filter { it.filename != null && it.mimeTypes?.any { m -> m.startsWith("image/") } == true }
-            ?.maxByOrNull { it.timeStamp }
-            ?.takeIf {
-                now - it.timeStamp in -60_000L..RECENT_IMAGE_MILLIS &&
-                    it.timeStamp > latinIME.prefs().getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
+    fun recentImageEntry(now: Long = System.currentTimeMillis()): ClipboardHistoryEntry? {
+        val prefs = latinIME.prefs()
+        val dismissedFiles = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet()).orEmpty()
+        val legacyDismissedTimestamp = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
+        return clipboardDao?.getAll()
+            ?.asSequence()
+            ?.filter { entry ->
+                val filename = entry.filename
+                filename != null &&
+                    filename !in dismissedFiles &&
+                    entry.mimeTypes?.any { it.startsWith("image/") } == true &&
+                    entry.timeStamp > legacyDismissedTimestamp &&
+                    now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
+            ?.maxByOrNull { it.timeStamp }
+    }
 
     private fun recentImageSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup): View? {
         val inputType = editorInfo?.inputType ?: InputType.TYPE_NULL
@@ -304,8 +325,12 @@ class ClipboardHistoryManager(
     }
 
     private fun dismissImageSuggestion(entry: ClipboardHistoryEntry) {
-        // Persist dismissal so a restarted IME does not re-offer the same recent image.
-        latinIME.prefs().edit().putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, entry.timeStamp).apply()
+        // Dismiss one file only: MediaStore DATE_ADDED may give several screenshots the same second.
+        val filename = entry.filename ?: return
+        val prefs = latinIME.prefs()
+        val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet()).orEmpty().toMutableSet()
+        if (dismissed.add(filename))
+            prefs.edit().putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed).apply()
     }
 
     private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
@@ -402,7 +427,8 @@ class ClipboardHistoryManager(
         // avoid showing the current suggestion because it has been dismissed or pasted
         private var dontShowCurrentSuggestion: Boolean = false
         /** image suggestion that was pasted or dismissed */
-        private const val PREF_DISMISSED_IMAGE_TIMESTAMP = "kl_clip_dismissed_image_timestamp"
+        private const val PREF_DISMISSED_IMAGE_TIMESTAMP = "kl_clip_dismissed_image_timestamp" // legacy cutoff from 1.4.2
+        private const val PREF_DISMISSED_IMAGE_FILENAMES = "kl_clip_dismissed_image_filenames"
         const val RECENT_IMAGE_MILLIS = 10 * 60 * 1000L
 
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)

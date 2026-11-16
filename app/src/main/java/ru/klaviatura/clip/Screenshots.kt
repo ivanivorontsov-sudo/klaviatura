@@ -22,7 +22,7 @@ import helium314.keyboard.latin.utils.prefs
 object Screenshots {
     const val PREF = "kl_clip_screenshots"
     const val DEFAULT = true // 1.3.1: on by default
-    private const val LAST = "kl_clip_last_screenshot"
+    private const val IMPORTED_IDS = "kl_clip_imported_screenshot_ids"
     private const val ASKED = "kl_clip_screenshots_asked"
     private const val WINDOW_S = 10 * 60
 
@@ -56,27 +56,57 @@ object Screenshots {
         activity.startActivity(android.content.Intent(activity, MediaPermissionActivity::class.java))
     }
 
-    fun importRecent(ctx: Context, add: (Uri, Long, ClipDescription) -> Unit) {
+    private data class PendingScreenshot(val id: Long, val uri: Uri, val timestamp: Long, val description: ClipDescription)
+
+    /**
+     * Import every unseen screenshot in the recent window. The callback runs on the caller's
+     * worker thread, keeping image copying and hashing off the keyboard UI thread.
+     * An ID is remembered only after the caller confirms that the image was saved.
+     */
+    fun importRecent(ctx: Context, add: (Uri, Long, ClipDescription) -> Boolean) {
         val prefs = ctx.prefs()
         if (!enabled(ctx) || !granted(ctx)) return
         try {
             val now = System.currentTimeMillis() / 1000
             val col = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             val pathCol = if (Build.VERSION.SDK_INT >= 29) MediaStore.Images.Media.RELATIVE_PATH else MediaStore.Images.Media.DATA
-            ctx.contentResolver.query(col, arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED,
-                    MediaStore.Images.Media.MIME_TYPE, pathCol, MediaStore.Images.Media.DISPLAY_NAME),
+            val importedIds = prefs.getStringSet(IMPORTED_IDS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            val pending = mutableListOf<PendingScreenshot>()
+            ctx.contentResolver.query(col, arrayOf(
+                    MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.DATE_ADDED,
+                    MediaStore.Images.Media.MIME_TYPE,
+                    pathCol,
+                    MediaStore.Images.Media.DISPLAY_NAME
+                ),
                 "${MediaStore.Images.Media.DATE_ADDED} > ?", arrayOf((now - WINDOW_S).toString()),
                 "${MediaStore.Images.Media.DATE_ADDED} DESC")?.use { c ->
-                var seen = 0
-                while (c.moveToNext() && seen++ < 20) {
+                var scanned = 0
+                while (c.moveToNext() && scanned++ < 100) {
                     if (!isScreenshot(c.getString(3), c.getString(4))) continue
                     val id = c.getLong(0)
-                    if (prefs.getLong(LAST, -1) == id) return
+                    if (id.toString() in importedIds) continue
+                    // DATE_ADDED has only second precision; use the MediaStore ID as a stable
+                    // sub-second tie-breaker so consecutive screenshots don't share timestamps.
+                    val timestamp = c.getLong(1) * 1000L + (id % 1000L)
                     val uri = ContentUris.withAppendedId(col, id)
-                    add(uri, c.getLong(1) * 1000, ClipDescription("Скриншот", arrayOf(c.getString(2) ?: "image/png")))
-                    prefs.edit().putLong(LAST, id).apply()
-                    return
+                    val mime = c.getString(2) ?: "image/png"
+                    pending.add(PendingScreenshot(id, uri, timestamp,
+                        ClipDescription("Скриншот", arrayOf(mime))))
                 }
+            }
+
+            var changed = false
+            pending.asReversed().forEach { item ->
+                val saved = runCatching { add(item.uri, item.timestamp, item.description) }.getOrDefault(false)
+                if (saved) {
+                    importedIds.add(item.id.toString())
+                    changed = true
+                }
+            }
+            if (changed) {
+                val boundedIds = if (importedIds.size > 300) importedIds.toList().takeLast(300).toSet() else importedIds.toSet()
+                prefs.edit().putStringSet(IMPORTED_IDS, boundedIds).apply()
             }
         } catch (e: Throwable) { android.util.Log.w("KlScreenshots", "import failed", e) }
     }
