@@ -204,6 +204,15 @@ class ClipboardDao private constructor(private val db: Database) {
         delete(listOf(cache[index]))
     }
 
+    /** Delete an explicitly selected clip by its stable ID; unlike swipe, this also removes pinned clips. */
+    fun deleteClip(id: Long) = synchronized(this) {
+        val position = cache.indexOfFirst { it.id == id }
+        if (position < 0) return@synchronized
+        val entry = cache[position]
+        delete(listOf(entry))
+        dispatchListener { it.onClipsRemoved(position, 1) }
+    }
+
     private fun delete(entries: List<ClipboardHistoryEntry>) = synchronized(this) {
         if (entries.isEmpty()) return@synchronized
         cache.removeAll(entries)
