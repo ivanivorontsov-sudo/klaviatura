@@ -23,6 +23,7 @@ import android.view.View
 import android.view.View.OnLongClickListener
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
@@ -118,6 +119,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val toolbarContainer: View = findViewById(R.id.toolbar_container)
     private val pinnedKeys: ViewGroup = findViewById(R.id.pinned_keys)
     private val suggestionsStrip: ViewGroup = findViewById(R.id.suggestions_strip)
+    // Screenshot chips have their own slot and never share the word-suggestion container.
+    private val screenshotSuggestionContainer: FrameLayout = findViewById(R.id.screenshot_suggestion_container)
     private val toolbarExpandKey = findViewById<ImageButton>(R.id.suggestions_strip_toolbar_key)
     private val incognitoIcon = KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.INCOGNITO.name, context)
     private val toolbarArrowIcon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_TOOLBAR_KEY, context)
@@ -229,9 +232,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setToolbarVisibility(toolbarVisible: Boolean) {
-        pinnedKeys.isVisible = !toolbarVisible
-        suggestionsStrip.isVisible = !toolbarVisible
         toolbarContainer.isVisible = toolbarVisible
+        syncSuggestionAreaVisibility()
 
         if (DEBUG_SUGGESTIONS) {
             for (view in debugInfoViews) {
@@ -240,6 +242,19 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
 
         toolbarExpandKey.scaleX = (if (toolbarVisible) -1f else 1f) * direction
+    }
+
+    /**
+     * Word suggestions and screenshot cards have separate visibility domains.
+     * A clipboard card may only occupy its own sibling slot; it cannot hide or clear
+     * the dictionary row when it is attached or dismissed.
+     */
+    private fun syncSuggestionAreaVisibility() {
+        val showRows = visibility == VISIBLE && !toolbarContainer.isVisible
+        suggestionsStrip.isVisible = showRows
+        pinnedKeys.isVisible = showRows
+        screenshotSuggestionContainer.isVisible =
+            showRows && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
@@ -252,26 +267,37 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         isExternalSuggestionVisible = false
         updateKeys()
         attachInlineSuggestionView()
+        syncSuggestionAreaVisibility()
     }
 
-    /** Adds a compact image chip beside words without replacing the live suggestion strip. */
+    /** Adds a compact screenshot chip in a sibling slot, independent of dictionary words. */
     fun setInlineSuggestionView(view: View?) {
-        if (inlineSuggestionView === view) {
-            attachInlineSuggestionView()
-            return
+        if (inlineSuggestionView !== view) {
+            inlineSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
+            inlineSuggestionView = view
         }
-        inlineSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
-        inlineSuggestionView = view
-        attachInlineSuggestionView()
+        if (view == null) {
+            screenshotSuggestionContainer.removeAllViews()
+        } else if (view.parent !== screenshotSuggestionContainer) {
+            (view.parent as? ViewGroup)?.removeView(view)
+            screenshotSuggestionContainer.removeAllViews()
+            screenshotSuggestionContainer.addView(
+                view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
+        }
+        syncSuggestionAreaVisibility()
     }
 
     private fun attachInlineSuggestionView() {
-        val view = inlineSuggestionView ?: return
-        if (isExternalSuggestionVisible || view.parent === suggestionsStrip) return
-        (view.parent as? ViewGroup)?.removeView(view)
-        val width = (70 * resources.displayMetrics.density).toInt()
-        suggestionsStrip.addView(view, LinearLayout.LayoutParams(width, LayoutParams.MATCH_PARENT))
-        if (!toolbarContainer.isVisible) suggestionsStrip.isVisible = true
+        val view = inlineSuggestionView
+        if (view != null && view.parent !== screenshotSuggestionContainer) {
+            (view.parent as? ViewGroup)?.removeView(view)
+            screenshotSuggestionContainer.removeAllViews()
+            screenshotSuggestionContainer.addView(
+                view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
+        }
+        syncSuggestionAreaVisibility()
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
@@ -297,6 +323,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             suggestionsStrip.addView(view)
         }
 
+        syncSuggestionAreaVisibility()
         if (Settings.getValues().mAutoHideToolbar) setToolbarVisibility(false)
     }
 
@@ -319,9 +346,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     override fun onVisibilityChanged(view: View, visibility: Int) {
         super.onVisibilityChanged(view, visibility)
-        // workaround for a bug with inline suggestions views that just keep showing up otherwise, https://github.com/HeliBorg/HeliBoard/pull/386
-        if (view === this)
-            suggestionsStrip.visibility = visibility
+        // Re-derive child state from the toolbar state rather than copying the parent
+        // visibility blindly. Blind copying can resurrect a hidden row or leave it hidden
+        // after the screenshot/clipboard card is detached.
+        if (view === this) syncSuggestionAreaVisibility()
     }
 
     override fun onDetachedFromWindow() {
@@ -494,7 +522,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             suggestedWords.mWillAutoCorrect, suggestedWords.mIsObsoleteSuggestions, suggestedWords.mInputStyle, suggestedWords.mSequenceNumber
         )
         setSuggestions(newSuggestedWords, direction != 1)
-        suggestionsStrip.isVisible = true
+        syncSuggestionAreaVisibility()
 
         // Show the toolbar if no suggestions are left and the "Auto show toolbar" setting is enabled
         if (this.suggestedWords.isEmpty && Settings.getValues().mAutoShowToolbar) {
@@ -503,14 +531,14 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     private fun clear() {
+        // Clear dictionary words only. The screenshot chip lives in its own sibling slot.
         suggestionsStrip.removeAllViews()
         if (DEBUG_SUGGESTIONS) removeAllDebugInfoViews()
-        if (!toolbarContainer.isVisible)
-            suggestionsStrip.isVisible = true
         dismissMoreSuggestionsPanel()
         for (word in wordViews) {
             word.setOnTouchListener(null)
         }
+        syncSuggestionAreaVisibility()
     }
 
     private fun removeAllDebugInfoViews() {
@@ -562,8 +590,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
 
         toolbarExpandKey.setOnClickListener(if (!toolbarIsExpandable) null else this)
-        pinnedKeys.visibility = suggestionsStrip.visibility
         isExternalSuggestionVisible = false
+        syncSuggestionAreaVisibility()
     }
 
     private fun addKeyToPinnedKeys(pinnedKey: ToolbarKey) {
