@@ -30,6 +30,18 @@ class AppWorkaroundsTest {
     }
 
     @Test
+    fun `Google app hosted assistant text fields may show candidates`() {
+        val assistantPrompt = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or noSuggestions
+        assertTrue(AppWorkarounds.mayOverrideNoSuggestionsFlag(assistantPrompt, "com.google.android.googlequicksearchbox"))
+    }
+
+    @Test
+    fun `Google app URI fields remain excluded from app-specific override`() {
+        val uri = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or noSuggestions
+        assertFalse(AppWorkarounds.mayOverrideNoSuggestionsFlag(uri, "com.google.android.googlequicksearchbox"))
+    }
+
+    @Test
     fun `email fields remain excluded from app-specific override`() {
         val email = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS or noSuggestions
         assertFalse(AppWorkarounds.mayOverrideNoSuggestionsFlag(email, "com.google.android.gm"))

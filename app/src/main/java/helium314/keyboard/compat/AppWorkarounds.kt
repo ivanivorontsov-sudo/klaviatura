@@ -11,7 +11,9 @@ object AppWorkarounds {
      * Allow the keyboard's word strip in a small set of user-reported text editors, but
      * keep the app's original inputType flags intact so NO_SUGGESTIONS still prevents
      * automatic correction. Vivaldi is limited to its URI address field; page form fields
-     * keep the browser's own composition policy.
+     * keep the browser's own composition policy. Google app text editors are included because
+     * Gemini/Assistant prompts can be hosted by the Google app package rather than the standalone
+     * Gemini package on some entry paths.
      */
     fun mayOverrideNoSuggestionsFlag(inputType: Int, packageName: String?): Boolean {
         if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
@@ -21,7 +23,8 @@ object AppWorkarounds {
         return when (packageName) {
             "com.vivaldi.browser" ->
                 variation == InputType.TYPE_TEXT_VARIATION_URI
-            "com.google.android.gm", "com.google.android.apps.bard" ->
+            "com.google.android.gm", "com.google.android.apps.bard",
+            "com.google.android.googlequicksearchbox" ->
                 variation != InputType.TYPE_TEXT_VARIATION_URI
                     && !InputTypeUtils.isEmailVariation(variation)
             else -> false
