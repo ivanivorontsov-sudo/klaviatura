@@ -1253,6 +1253,11 @@ public class LatinIME extends InputMethodService implements
                 FloatingKeyboardUtils.setFloating(mInputView);
             setNavigationBarColor();
             workaroundForHuaweiStatusBarIssue();
+
+            // Switching apps hides the IME window and cancels pending suggestion callbacks.
+            // Rebuild suggestions when the same editor becomes visible again, even if the
+            // cursor did not move and the app sends no further selection callback.
+            mHandler.postResumeSuggestions(true /* allow the editor connection to settle */);
         }
     }
 
