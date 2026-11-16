@@ -1740,6 +1740,7 @@ public class LatinIME extends InputMethodService implements
                 mSuggestionStripView.setToolbarVisibility(false);
             }
         }
+        refreshScreenshotSuggestion();
     }
 
     @Override
@@ -1785,10 +1786,19 @@ public class LatinIME extends InputMethodService implements
         if (!hasSuggestionStripView()) return false;
         View clipboardView = mClipboardHistoryManager.getClipboardSuggestionView(getCurrentInputEditorInfo(), mSuggestionStripView);
         if (clipboardView != null) {
+            mSuggestionStripView.setInlineSuggestionView(null);
             mSuggestionStripView.setExternalSuggestionView(clipboardView, false);
             return true;
         }
         return false;
+    }
+
+    /** Refresh only the screenshot chip; the current word suggestions stay intact. */
+    public void refreshScreenshotSuggestion() {
+        if (!hasSuggestionStripView()) return;
+        View view = mClipboardHistoryManager.getRecentScreenshotSuggestionView(
+                getCurrentInputEditorInfo(), mSuggestionStripView);
+        mSuggestionStripView.setInlineSuggestionView(view);
     }
 
     // This will first try showing a clipboard suggestion. On success, the toolbar will be hidden

@@ -92,7 +92,6 @@ object VoiceInput {
 
     fun start(t: VoiceTarget) {
         val c = ctx ?: return
-        target = t
         val lang = currentLang()
         if (!supported(lang)) { toast("Голос для языка «$lang» пока не поддерживается"); return }
         val langs = (if (mixed()) listOf(lang, secondLang(lang)) else listOf(lang)).map { engineKey(it) }
