@@ -209,15 +209,22 @@ class ClipboardHistoryManager(
         clearingHistory = true
         screenshotHandler.removeCallbacksAndMessages(null)
         screenshotHandler.post {
-            clipboardDao?.clear()
+            val clearResult = runCatching { clipboardDao?.clear() }
             mainHandler.post {
                 if (destroyed || generation != historyClearGeneration) return@post
-                screenshotSuggestionView = null
-                screenshotSuggestionFilename = null
-                ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
-                removeClipboardSuggestion()
-                latinIME.refreshScreenshotSuggestion()
-                clearingHistory = false
+                try {
+                    if (clearResult.isFailure)
+                        Log.w(TAG, "could not clear clipboard database", clearResult.exceptionOrNull())
+                    screenshotSuggestionView = null
+                    screenshotSuggestionFilename = null
+                    ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
+                    removeClipboardSuggestion()
+                    latinIME.refreshScreenshotSuggestion()
+                } catch (e: Throwable) {
+                    Log.w(TAG, "clipboard clear completion failed", e)
+                } finally {
+                    clearingHistory = false
+                }
             }
         }
     }

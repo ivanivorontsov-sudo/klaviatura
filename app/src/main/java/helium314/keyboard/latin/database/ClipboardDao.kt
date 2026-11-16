@@ -239,18 +239,15 @@ class ClipboardDao private constructor(private val db: Database) {
 
     fun clear() = synchronized(this) {
         val removedCount = cache.size
-        val removedEntries = cache.toList()
         cache.clear()
         db.writableDatabase.delete(TABLE, null, null)
 
-        // Delete every stored file, including orphaned files left by interrupted imports.
+        // The dedicated clipboard directory contains only copies owned by this history.
+        // Removing its direct files also cleans up orphans from interrupted imports.
         runCatching {
             clipFilesDir.listFiles()?.forEach { file ->
                 if (file.isFile) file.delete()
             }
-        }
-        removedEntries.forEach { entry ->
-            if (entry.filename != null) File(clipFilesDir, entry.filename).delete()
         }
 
         if (removedCount > 0)
