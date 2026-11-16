@@ -13,9 +13,131 @@
     android:background="@android:color/transparent"
     style="?attr/clipboardHistoryViewStyle">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="6dp">
+
+        <TextView
+            android:id="@+id/clipboard_title"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:text="Буфер обмена"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/clipboard_clear_all"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:minWidth="104dp"
+            android:paddingHorizontal="10dp"
+            android:text="Очистить всё"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp">
+
+            <TextView
+                android:id="@+id/clipboard_filter_all"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:minWidth="48dp"
+                android:paddingHorizontal="10dp"
+                android:text="Все"
+                android:textSize="12sp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                tools:ignore="HardcodedText" />
+
+            <TextView
+                android:id="@+id/clipboard_filter_text"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:minWidth="48dp"
+                android:paddingHorizontal="10dp"
+                android:text="Текст"
+                android:textSize="12sp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                tools:ignore="HardcodedText" />
+
+            <TextView
+                android:id="@+id/clipboard_filter_images"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:minWidth="62dp"
+                android:paddingHorizontal="10dp"
+                android:text="Фото"
+                android:textSize="12sp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                tools:ignore="HardcodedText" />
+
+            <TextView
+                android:id="@+id/clipboard_filter_files"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:minWidth="62dp"
+                android:paddingHorizontal="10dp"
+                android:text="Файлы"
+                android:textSize="12sp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                tools:ignore="HardcodedText" />
+
+            <TextView
+                android:id="@+id/clipboard_filter_pinned"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:minWidth="78dp"
+                android:paddingHorizontal="10dp"
+                android:text="Закреплённые"
+                android:textSize="12sp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                tools:ignore="HardcodedText" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <TextView
             android:id="@+id/clipboard_empty_view"
@@ -23,15 +145,14 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:visibility="invisible"
-            android:text="¯\\_(ツ)_/¯"
+            android:text="Буфер пока пуст"
             tools:ignore="HardcodedText" />
 
         <helium314.keyboard.keyboard.clipboard.ClipboardHistoryRecyclerView
             android:id="@+id/clipboard_list"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"/>
-
+            android:layout_height="match_parent"
+            android:orientation="vertical" />
     </FrameLayout>
 
     <helium314.keyboard.keyboard.MainKeyboardView
