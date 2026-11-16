@@ -112,7 +112,7 @@ object Screenshots {
     }
 
     /** new screenshots arrive while the keyboard is alive (ColorOS writes the file a moment after the flash) */
-    fun observer(ctx: Context, handler: android.os.Handler, add: (Uri, Long, ClipDescription) -> Unit) =
+    fun observer(ctx: Context, handler: android.os.Handler, add: (Uri, Long, ClipDescription) -> Boolean) =
         object : android.database.ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 // the file may still be pending: retry shortly

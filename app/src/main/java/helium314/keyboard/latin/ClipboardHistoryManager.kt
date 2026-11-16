@@ -67,7 +67,8 @@ class ClipboardHistoryManager(
                         if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
                             refreshStripForImage()
                     }
-                }
+                    saved
+                } else false
             }
         } catch (e: Throwable) { }
         if (latinIME.mSettings.current.mClipboardHistoryEnabled)
