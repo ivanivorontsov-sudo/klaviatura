@@ -1143,6 +1143,20 @@ public class LatinIME extends InputMethodService implements
             return;
         }
         Log.i(TAG, (restarting ? "Res" : "S") +"tarting input. Cursor position = " + editorInfo.initialSelStart + "," + editorInfo.initialSelEnd);
+        if ("com.google.android.gm".equals(editorInfo.packageName)
+                || "com.google.android.apps.bard".equals(editorInfo.packageName)
+                || "com.google.android.googlequicksearchbox".equals(editorInfo.packageName)) {
+            Log.i(TAG, "SUGGESTION_DIAG stage=settings"
+                    + " app=" + editorInfo.packageName
+                    + " inputType=0x" + Integer.toHexString(currentSettingsValues.mInputAttributes.mInputType)
+                    + " shouldShow=" + currentSettingsValues.mInputAttributes.mShouldShowSuggestions
+                    + " alwaysShowOverride=" + currentSettingsValues.mOverrideShowingSuggestions
+                    + " suggestionsEnabled=" + currentSettingsValues.mSuggestionsEnabled
+                    + " needsLookup=" + currentSettingsValues.needsToLookupSuggestions()
+                    + " autoCorrect=" + currentSettingsValues.mAutoCorrectEnabled
+                    + " toolbarMode=" + currentSettingsValues.mToolbarMode
+                    + " suggestionStripHidden=" + currentSettingsValues.mSuggestionStripHiddenPerUserSettings);
+        }
         if (DebugFlags.DEBUG_ENABLED) {
             EditorInfoCompatUtils.INSTANCE.debugLog(editorInfo, TAG);
         }

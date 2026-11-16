@@ -82,6 +82,7 @@ public final class InputAttributes {
             mDisableGestureFloatingPreviewText = false;
             mIsGeneralTextInput = false;
             mNoLearning = false;
+            logGoogleEditorSuggestionPolicy(editorInfo);
             return;
         }
 
@@ -146,6 +147,36 @@ public final class InputAttributes {
             mNoLearning = (editorInfo.imeOptions & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0;
         else
             mNoLearning = false;
+
+        logGoogleEditorSuggestionPolicy(editorInfo);
+    }
+
+    /**
+     * Diagnostic only: log editor metadata and suggestion-policy decisions for Google editors.
+     * Never log text, composing content, email addresses, or private IME options.
+     */
+    private void logGoogleEditorSuggestionPolicy(final EditorInfo editorInfo) {
+        if (editorInfo == null || !isGoogleEditor(editorInfo.packageName)) return;
+        final int rawInputType = editorInfo.inputType;
+        Log.i(TAG, "SUGGESTION_DIAG stage=attributes"
+                + " app=" + editorInfo.packageName
+                + " fieldId=" + editorInfo.fieldId
+                + " rawInputType=0x" + Integer.toHexString(rawInputType)
+                + " effectiveInputType=0x" + Integer.toHexString(mInputType)
+                + " class=" + (rawInputType & InputType.TYPE_MASK_CLASS)
+                + " variation=" + (rawInputType & InputType.TYPE_MASK_VARIATION)
+                + " flags=0x" + Integer.toHexString(rawInputType & InputType.TYPE_MASK_FLAGS)
+                + " noSuggestions=" + ((rawInputType & InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0)
+                + " shouldShow=" + mShouldShowSuggestions
+                + " mayOverride=" + mMayOverrideShowingSuggestions
+                + " autoCorrect=" + mInputTypeShouldAutoCorrect
+                + " noLearning=" + mNoLearning);
+    }
+
+    private static boolean isGoogleEditor(final String packageName) {
+        return "com.google.android.gm".equals(packageName)
+                || "com.google.android.apps.bard".equals(packageName)
+                || "com.google.android.googlequicksearchbox".equals(packageName);
     }
 
     public boolean isTypeNull() {
