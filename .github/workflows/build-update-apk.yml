@@ -46,7 +46,7 @@ jobs:
         run: echo "${{ secrets.KS_B64 }}" | base64 -d > "$RUNNER_TEMP/ks.jks"
 
       - name: Build signed release APK
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon assembleRelease --stacktrace
         env:
           KS_FILE: ${{ runner.temp }}/ks.jks
           KS_PASS: ${{ secrets.KS_PASS }}
