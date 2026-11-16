@@ -87,8 +87,8 @@ object Screenshots {
                     if (!isScreenshot(c.getString(3), c.getString(4))) continue
                     val id = c.getLong(0)
                     if (id.toString() in importedIds) continue
-                    // DATE_ADDED has only second precision; use the MediaStore ID as a stable
-                    // sub-second tie-breaker so consecutive screenshots don't share timestamps.
+                    // Prefer the actual capture time so a new screenshot can reopen the prompt
+                    // immediately, even when it is created in the same DATE_ADDED second.
                     val takenAt = c.getLong(5)
                     val timestamp = if (takenAt > 0L) takenAt else c.getLong(1) * 1000L + (id % 1000L)
                     val uri = ContentUris.withAppendedId(col, id)
