@@ -69,6 +69,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
 
         <!-- separate activity that's used internally, only necessary in case the launcher icon is disabled on Android < 10 -->
         <activity android:name="helium314.keyboard.settings.SettingsActivity2"
+            android:excludeFromRecents="true"
             android:theme="@style/platformActivityTheme"
             android:icon="@mipmap/ic_launcher"
             android:windowSoftInputMode="adjustResize"
@@ -83,6 +84,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
         </activity>
 
         <activity android:name=".spellcheck.SpellCheckerSettingsActivity"
+                android:excludeFromRecents="true"
                 android:theme="@style/platformActivityTheme"
                 android:label="@string/spell_checker_service_name"
                 android:exported="true">
@@ -134,7 +136,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/gesture_data_path"/>
         </provider>
-        <activity android:name="ru.klaviatura.voice.ModelImportActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity android:name="ru.klaviatura.voice.ModelImportActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name="ru.klaviatura.voice.VoicePermissionActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
         <activity android:name="ru.klaviatura.bg.AiBackgroundActivity" android:exported="false"
@@ -148,6 +150,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
         <activity android:name="ru.klaviatura.clip.MediaPermissionActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
         <activity android:name="ru.klaviatura.glide.LearnTransferActivity" android:exported="false"
+            android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
