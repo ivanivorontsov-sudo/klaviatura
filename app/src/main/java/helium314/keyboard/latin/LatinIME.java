@@ -576,6 +576,30 @@ public class LatinIME extends InputMethodService implements
             expectedVoiceSelEnd = mInputLogic.mConnection.getExpectedSelectionEnd();
         }
 
+        private boolean selectionStillAtVoiceAnchor() {
+            if (expectedVoiceSelStart < 0 || expectedVoiceSelEnd < 0) return true;
+            try {
+                final android.view.inputmethod.ExtractedText extracted = voiceConnection.getExtractedText(
+                        new android.view.inputmethod.ExtractedTextRequest(), 0);
+                if (extracted == null || extracted.selectionStart < 0 || extracted.selectionEnd < 0)
+                    return true; // Some editors do not expose extracted selection information.
+                final int start = extracted.selectionStart + extracted.startOffset;
+                final int end = extracted.selectionEnd + extracted.startOffset;
+                return start == expectedVoiceSelStart && end == expectedVoiceSelEnd;
+            } catch (Exception ignored) {
+                return mInputLogic.mConnection.getExpectedSelectionStart() == expectedVoiceSelStart
+                        && mInputLogic.mConnection.getExpectedSelectionEnd() == expectedVoiceSelEnd;
+            }
+        }
+
+        private boolean keepVoiceAtCurrentCaret() {
+            if (selectionStillAtVoiceAnchor()) return true;
+            // An editor moved the caret before its selection callback reached us. Freeze this
+            // partial and drop queued recognizer output rather than inserting at a stale offset.
+            finishPartialForManualEdit();
+            return false;
+        }
+
         @Override public boolean beginSession() {
             voiceConnection = getCurrentInputConnection();
             final EditorInfo editor = getCurrentInputEditorInfo();
@@ -601,6 +625,7 @@ public class LatinIME extends InputMethodService implements
 
         @Override public void showPartial(@NonNull String text) {
             if (!isCurrentVoiceEditor()) { voiceSessionActive = false; return; }
+            if (!keepVoiceAtCurrentCaret()) return;
             final android.view.inputmethod.InputConnection ic = voiceConnection;
             lastRawPartial = text;
             String partial = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
@@ -634,17 +659,27 @@ public class LatinIME extends InputMethodService implements
                 return;
             }
             manualEditSinceVoice = true;
-            if (!composing) return;
-            writingVoiceText = true;
-            try { voiceConnection.finishComposingText(); }
-            finally { writingVoiceText = false; }
-            composing = false;
-            frozenPrefix = lastRawPartial;
+            if (composing) {
+                writingVoiceText = true;
+                try { voiceConnection.finishComposingText(); }
+                finally { writingVoiceText = false; }
+                composing = false;
+                frozenPrefix = lastRawPartial;
+            }
+            // Re-anchor even when there is no partial composition (for example, a caret move
+            // before the recognizer produced its first word).
             refreshVoiceCaches();
+        }
+
+        @Override public void afterManualEdit() {
+            if (!isCurrentVoiceEditor()) return;
+            expectedVoiceSelStart = mInputLogic.mConnection.getExpectedSelectionStart();
+            expectedVoiceSelEnd = mInputLogic.mConnection.getExpectedSelectionEnd();
         }
 
         @Override public void commitPhrase(@NonNull String text) {
             if (!isCurrentVoiceEditor()) { voiceSessionActive = false; return; }
+            if (!keepVoiceAtCurrentCaret()) return;
             final android.view.inputmethod.InputConnection ic = voiceConnection;
             if (manualEditSinceVoice) {
                 mInputLogic.finishInput();
@@ -1279,6 +1314,7 @@ public class LatinIME extends InputMethodService implements
                 mVoiceTarget.finishPartialForManualEdit();
             }
             mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
+            mVoiceTarget.afterManualEdit();
             return;
         }
         final SettingsValues settingsValues = mSettings.getCurrent();
@@ -1620,6 +1656,7 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onCodeInput(final int codePoint, final int x, final int y, final boolean isKeyRepeat) {
         mKeyboardActionListener.onCodeInput(codePoint, x, y, isKeyRepeat);
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) mVoiceTarget.afterManualEdit();
     }
 
     // This method is public for testability of LatinIME, but also in the future it should
@@ -1645,6 +1682,7 @@ public class LatinIME extends InputMethodService implements
                         mKeyboardSwitcher.getCurrentKeyboardScript(), mHandler);
         updateStateAfterInputTransaction(completeInputTransaction);
         mKeyboardSwitcher.onEvent(event, getCurrentAutoCapsState(), getCurrentRecapitalizeState());
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) mVoiceTarget.afterManualEdit();
     }
 
     public void onTextInput(@Nullable String rawText) {
@@ -1658,6 +1696,7 @@ public class LatinIME extends InputMethodService implements
         updateStateAfterInputTransaction(completeInputTransaction);
         mInputLogic.restartSuggestionsOnWordTouchedByCursor(mSettings.getCurrent(), mKeyboardSwitcher.getCurrentKeyboardScript());
         mKeyboardSwitcher.onEvent(event, getCurrentAutoCapsState(), getCurrentRecapitalizeState());
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) mVoiceTarget.afterManualEdit();
     }
 
     public void onStartBatchInput() {

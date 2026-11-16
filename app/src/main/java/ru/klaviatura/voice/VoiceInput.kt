@@ -306,6 +306,8 @@ interface VoiceTarget {
     fun commitPhrase(text: String)
     /** Freeze the current partial before the user types or moves the caret. */
     fun finishPartialForManualEdit()
+    /** Re-anchor the selection after a manual key, paste, or cursor move. */
+    fun afterManualEdit() {}
     /** True when the selection update was caused by our most recent voice write. */
     fun isExpectedSelection(start: Int, end: Int): Boolean
     fun endVoice()

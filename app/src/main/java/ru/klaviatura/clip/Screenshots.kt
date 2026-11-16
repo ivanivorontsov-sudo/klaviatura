@@ -77,7 +77,8 @@ object Screenshots {
                     MediaStore.Images.Media.DATE_ADDED,
                     MediaStore.Images.Media.MIME_TYPE,
                     pathCol,
-                    MediaStore.Images.Media.DISPLAY_NAME
+                    MediaStore.Images.Media.DISPLAY_NAME,
+                    MediaStore.Images.Media.DATE_TAKEN
                 ),
                 "${MediaStore.Images.Media.DATE_ADDED} > ?", arrayOf((now - WINDOW_S).toString()),
                 "${MediaStore.Images.Media.DATE_ADDED} DESC")?.use { c ->
@@ -88,7 +89,8 @@ object Screenshots {
                     if (id.toString() in importedIds) continue
                     // DATE_ADDED has only second precision; use the MediaStore ID as a stable
                     // sub-second tie-breaker so consecutive screenshots don't share timestamps.
-                    val timestamp = c.getLong(1) * 1000L + (id % 1000L)
+                    val takenAt = c.getLong(5)
+                    val timestamp = if (takenAt > 0L) takenAt else c.getLong(1) * 1000L + (id % 1000L)
                     val uri = ContentUris.withAppendedId(col, id)
                     val mime = c.getString(2) ?: "image/png"
                     pending.add(PendingScreenshot(id, uri, timestamp,

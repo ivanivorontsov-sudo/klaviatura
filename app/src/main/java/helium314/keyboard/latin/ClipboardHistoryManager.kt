@@ -383,11 +383,9 @@ class ClipboardHistoryManager(
         dismissed.addAll(recentFiles)
         screenshotSuggestionFilename?.let { dismissed.add(it) }
 
-        val cutoff = (now / 1000L + 1L) * 1000L - 1L
-        val previousCutoff = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
         prefs.edit()
             .putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed)
-            .putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, maxOf(previousCutoff, cutoff))
+            .putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, now)
             .apply()
     }
 
