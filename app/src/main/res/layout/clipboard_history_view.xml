@@ -42,7 +42,7 @@
             android:text="Очистить всё"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:background="?attr/selectableItemBackground"
+            android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
             tools:ignore="HardcodedText" />
@@ -71,7 +71,7 @@
                 android:paddingHorizontal="10dp"
                 android:text="Все"
                 android:textSize="12sp"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
                 tools:ignore="HardcodedText" />
@@ -85,7 +85,7 @@
                 android:paddingHorizontal="10dp"
                 android:text="Текст"
                 android:textSize="12sp"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
                 tools:ignore="HardcodedText" />
@@ -99,7 +99,7 @@
                 android:paddingHorizontal="10dp"
                 android:text="Фото"
                 android:textSize="12sp"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
                 tools:ignore="HardcodedText" />
@@ -113,7 +113,7 @@
                 android:paddingHorizontal="10dp"
                 android:text="Файлы"
                 android:textSize="12sp"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
                 tools:ignore="HardcodedText" />
@@ -127,7 +127,7 @@
                 android:paddingHorizontal="10dp"
                 android:text="Закреплённые"
                 android:textSize="12sp"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true"
                 tools:ignore="HardcodedText" />
