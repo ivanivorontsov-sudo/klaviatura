@@ -93,7 +93,18 @@ public final class InputAttributes {
 
         // TODO: Have a helper method in InputTypeUtils
         // Make sure that passwords are not displayed in {@link SuggestionStripView}.
-        mShouldShowSuggestions = !mIsPasswordField && !flagNoSuggestions;
+        // A few app-specific editors use NO_SUGGESTIONS even for normal prose. For those
+        // narrowly identified fields, allow dictionary candidates without clearing the
+        // original flag: auto-correction remains disabled as requested by the editor.
+        final boolean appAllowsDictionarySuggestions = flagNoSuggestions
+                && AppWorkarounds.INSTANCE.mayOverrideNoSuggestionsFlag(
+                        mInputType, mTargetApplicationPackageName);
+        if (appAllowsDictionarySuggestions) {
+            Log.i(TAG, "Showing dictionary candidates despite NO_SUGGESTIONS for "
+                    + mTargetApplicationPackageName);
+        }
+        mShouldShowSuggestions = !mIsPasswordField
+                && (!flagNoSuggestions || appAllowsDictionarySuggestions);
         mMayOverrideShowingSuggestions = !mIsPasswordField;
 
         mShouldInsertSpacesAutomatically = InputTypeUtils.isAutoSpaceFriendlyType(mInputType);

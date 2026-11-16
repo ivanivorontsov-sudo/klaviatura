@@ -6,6 +6,28 @@ import android.view.inputmethod.EditorInfo
 import helium314.keyboard.latin.utils.InputTypeUtils
 
 object AppWorkarounds {
+    /**
+     * Some app editors mark ordinary text fields as not needing dictionary candidates.
+     * Allow the keyboard's word strip in a small set of user-reported text editors, but
+     * keep the app's original inputType flags intact so NO_SUGGESTIONS still prevents
+     * automatic correction. Vivaldi is limited to its URI address field; page form fields
+     * keep the browser's own composition policy.
+     */
+    fun mayOverrideNoSuggestionsFlag(inputType: Int, packageName: String?): Boolean {
+        if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
+        if (InputTypeUtils.isAnyPasswordInputType(inputType)) return false
+
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        return when (packageName) {
+            "com.vivaldi.browser" ->
+                variation == InputType.TYPE_TEXT_VARIATION_URI
+            "com.google.android.gm", "com.google.android.apps.bard" ->
+                variation != InputType.TYPE_TEXT_VARIATION_URI
+                    && !InputTypeUtils.isEmailVariation(variation)
+            else -> false
+        }
+    }
+
     fun adjustInputType(inputType: Int, packageName: String?): Int {
         return if (isFirefoxOrFork(packageName)) {
             // Firefox and forks (assuming all of them) don't set these flags, so we want to force them for most text fields on websites
