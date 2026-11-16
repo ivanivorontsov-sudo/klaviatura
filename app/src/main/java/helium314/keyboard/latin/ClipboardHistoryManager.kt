@@ -202,7 +202,10 @@ class ClipboardHistoryManager(
         clipboardDao?.togglePinned(id)
     }
 
-    fun clearHistory(onComplete: (() -> Unit)? = null) {
+    // Keep the no-argument API for existing Java callers.
+    fun clearHistory() = clearHistory(null)
+
+    fun clearHistory(onComplete: (() -> Unit)?) {
         // Screenshot imports share one worker. Clear behind an import already in progress,
         // and cancel queued retries so an old MediaStore scan cannot repopulate the buffer.
         val generation = ++historyClearGeneration
