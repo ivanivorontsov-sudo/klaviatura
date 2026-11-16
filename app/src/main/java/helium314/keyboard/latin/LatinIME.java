@@ -665,10 +665,8 @@ public class LatinIME extends InputMethodService implements
                 finally { writingVoiceText = false; }
                 composing = false;
                 frozenPrefix = lastRawPartial;
+                refreshVoiceCaches();
             }
-            // Re-anchor even when there is no partial composition (for example, a caret move
-            // before the recognizer produced its first word).
-            refreshVoiceCaches();
         }
 
         @Override public void afterManualEdit() {
@@ -1302,19 +1300,22 @@ public class LatinIME extends InputMethodService implements
         // view is not displayed we have no means of showing suggestions anyway, and if it is then
         // we want to show suggestions anyway.
         if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening() || mVoiceSettling) {
-            // Voice-owned composing updates keep the caret at the end of their composing span.
-            // A selection outside that span is a manual cursor/selection change: freeze the current
-            // partial in place so subsequent speech starts at the new caret instead of moving old text.
+            // Voice-owned writes and normal keyboard edits already update the RichInputConnection
+            // cache. Reset it only for a real external cursor/selection move; doing so after every
+            // selection callback erases the keyboard's composing-word cache and can move a letter.
             final boolean selectionChanged = oldSelStart != newSelStart || oldSelEnd != newSelEnd;
             final boolean caretAtVoicePartialEnd = composingSpanStart >= 0
                     && newSelStart == composingSpanEnd && newSelEnd == composingSpanEnd;
             final boolean expectedVoiceSelection = mVoiceTarget.isExpectedSelection(newSelStart, newSelEnd);
-            if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()
-                    && selectionChanged && !caretAtVoicePartialEnd && !expectedVoiceSelection) {
-                mVoiceTarget.finishPartialForManualEdit();
+            final boolean manualSelectionMove = selectionChanged
+                    && !caretAtVoicePartialEnd && !expectedVoiceSelection;
+            if (manualSelectionMove) {
+                if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening())
+                    mVoiceTarget.finishPartialForManualEdit();
+                mInputLogic.finishInput();
+                mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
+                mVoiceTarget.afterManualEdit();
             }
-            mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
-            mVoiceTarget.afterManualEdit();
             return;
         }
         final SettingsValues settingsValues = mSettings.getCurrent();
@@ -1655,6 +1656,8 @@ public class LatinIME extends InputMethodService implements
     // Implementation of {@link SuggestionStripView.Listener}.
     @Override
     public void onCodeInput(final int codePoint, final int x, final int y, final boolean isKeyRepeat) {
+        if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening())
+            mVoiceTarget.finishPartialForManualEdit();
         mKeyboardActionListener.onCodeInput(codePoint, x, y, isKeyRepeat);
         if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) mVoiceTarget.afterManualEdit();
     }
