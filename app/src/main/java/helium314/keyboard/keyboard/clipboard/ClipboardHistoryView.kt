@@ -5,6 +5,9 @@ package helium314.keyboard.keyboard.clipboard
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
@@ -56,6 +59,14 @@ class ClipboardHistoryView @JvmOverloads constructor(
     private lateinit var placeholderView: TextView
     private val toolbarKeys = mutableListOf<ImageButton>()
     private lateinit var clipboardAdapter: ClipboardAdapter
+    private lateinit var clearAllButton: TextView
+    private val filterButtons = linkedMapOf<ClipboardFilter, TextView>()
+    private var clearConfirmationArmed = false
+    private val clearConfirmHandler = Handler(Looper.getMainLooper())
+    private val resetClearConfirmation = Runnable {
+        clearConfirmationArmed = false
+        if (this::clearAllButton.isInitialized) clearAllButton.text = "Очистить всё"
+    }
 
     lateinit var keyboardActionListener: KeyboardActionListener
     private lateinit var clipboardHistoryManager: ClipboardHistoryManager
@@ -92,6 +103,18 @@ class ClipboardHistoryView @JvmOverloads constructor(
             pinnedIconResId = pinIconId
         }
         placeholderView = findViewById(R.id.clipboard_empty_view)
+        clearAllButton = findViewById<TextView>(R.id.clipboard_clear_all).apply {
+            setOnClickListener { onClearAllClicked() }
+        }
+        filterButtons[ClipboardFilter.ALL] = findViewById(R.id.clipboard_filter_all)
+        filterButtons[ClipboardFilter.TEXT] = findViewById(R.id.clipboard_filter_text)
+        filterButtons[ClipboardFilter.IMAGES] = findViewById(R.id.clipboard_filter_images)
+        filterButtons[ClipboardFilter.FILES] = findViewById(R.id.clipboard_filter_files)
+        filterButtons[ClipboardFilter.PINNED] = findViewById(R.id.clipboard_filter_pinned)
+        filterButtons.forEach { (filter, button) ->
+            button.setOnClickListener { applyClipboardFilter(filter) }
+        }
+        applyClipboardFilter(ClipboardFilter.ALL)
         clipboardRecyclerView = findViewById<ClipboardHistoryRecyclerView>(R.id.clipboard_list).apply {
             val colCount = resources.getInteger(R.integer.config_clipboard_keyboard_col_count)
             layoutManager = StaggeredGridLayoutManager(colCount, StaggeredGridLayoutManager.VERTICAL)
@@ -152,6 +175,8 @@ class ClipboardHistoryView @JvmOverloads constructor(
         historyManager.prepareClipboardHistory()
         historyManager.setHistoryChangeListener(this)
         clipboardAdapter.clipboardHistoryManager = historyManager
+        clipboardAdapter.refreshEntries()
+        updateClearAllButton()
 
         val params = KeyDrawParams()
         params.updateParams(clipboardLayoutParams.bottomRowKeyboardHeight, keyVisualAttr)
@@ -191,9 +216,48 @@ class ClipboardHistoryView @JvmOverloads constructor(
 
     fun stopClipboardHistory() {
         if (!this::clipboardAdapter.isInitialized) return
+        clearConfirmHandler.removeCallbacks(resetClearConfirmation)
+        clearConfirmationArmed = false
         clipboardRecyclerView.adapter = null
         clipboardHistoryManager.setHistoryChangeListener(null)
         clipboardAdapter.clipboardHistoryManager = null
+    }
+
+    private fun applyClipboardFilter(filter: ClipboardFilter) {
+        clipboardAdapter.filter = filter
+        filterButtons.forEach { (candidate, button) ->
+            val selected = candidate == filter
+            button.isSelected = selected
+            button.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+            button.alpha = if (selected) 1f else 0.72f
+        }
+        clipboardAdapter.refreshEntries()
+    }
+
+    private fun updateClearAllButton() {
+        if (this::clearAllButton.isInitialized && !clearConfirmationArmed) {
+            clearAllButton.text = "Очистить всё"
+            clearAllButton.isEnabled = clipboardHistoryManager.getHistorySize() > 0
+        }
+    }
+
+    private fun onClearAllClicked() {
+        if (!clearConfirmationArmed) {
+            clearConfirmationArmed = true
+            clearAllButton.text = "Подтвердить очистку"
+            clearConfirmHandler.removeCallbacks(resetClearConfirmation)
+            clearConfirmHandler.postDelayed(resetClearConfirmation, 4_000L)
+            return
+        }
+        clearConfirmHandler.removeCallbacks(resetClearConfirmation)
+        clearConfirmationArmed = false
+        clearAllButton.text = "Очищаю…"
+        clearAllButton.isEnabled = false
+        clipboardHistoryManager.clearHistory {
+            clipboardAdapter.refreshEntries()
+            clearAllButton.text = "Очистить всё"
+            updateClearAllButton()
+        }
     }
 
     override fun onClick(view: View) {
@@ -228,18 +292,21 @@ class ClipboardHistoryView @JvmOverloads constructor(
     }
 
     override fun onClipInserted(position: Int) {
-        clipboardAdapter.notifyItemInserted(position)
-        clipboardRecyclerView.smoothScrollToPosition(position)
+        clipboardAdapter.refreshEntries()
+        updateClearAllButton()
+        if (clipboardAdapter.itemCount > 0) clipboardRecyclerView.smoothScrollToPosition(0)
     }
 
     override fun onClipsRemoved(position: Int, count: Int) {
-        clipboardAdapter.notifyItemRangeRemoved(position, count)
+        clipboardAdapter.refreshEntries()
+        updateClearAllButton()
     }
 
     override fun onClipMoved(oldPosition: Int, newPosition: Int) {
-        clipboardAdapter.notifyItemMoved(oldPosition, newPosition)
-        clipboardAdapter.notifyItemChanged(newPosition)
-        if (newPosition < oldPosition) clipboardRecyclerView.smoothScrollToPosition(newPosition)
+        clipboardAdapter.refreshEntries()
+        updateClearAllButton()
+        if (newPosition < oldPosition && clipboardAdapter.itemCount > 0)
+            clipboardRecyclerView.smoothScrollToPosition(0)
     }
 
     override fun onSharedPreferenceChanged(prefs: SharedPreferences?, key: String?) {
@@ -250,7 +317,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
             // Ensure settings are reloaded first
             Settings.getInstance().onSharedPreferenceChanged(prefs, key)
             clipboardHistoryManager.sortHistoryEntries()
-            clipboardAdapter.notifyDataSetChanged()
+            clipboardAdapter.refreshEntries()
         }
     }
 }
