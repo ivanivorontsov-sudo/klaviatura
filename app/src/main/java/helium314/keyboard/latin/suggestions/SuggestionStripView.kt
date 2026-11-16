@@ -17,6 +17,7 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -121,6 +122,17 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val suggestionsStrip: ViewGroup = findViewById(R.id.suggestions_strip)
     // Screenshot chips have their own slot and never share the word-suggestion container.
     private val screenshotSuggestionContainer: FrameLayout = findViewById(R.id.screenshot_suggestion_container)
+    private val voiceStatusContainer: FrameLayout = findViewById(R.id.voice_status_container)
+    private val voiceStatusLabel = TextView(context).apply {
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        textSize = 11f
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        val pad = (4 * resources.displayMetrics.density).toInt()
+        setPadding(pad, 0, pad, 0)
+    }
+    private var voiceStatusActive = false
     private val toolbarExpandKey = findViewById<ImageButton>(R.id.suggestions_strip_toolbar_key)
     private val incognitoIcon = KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.INCOGNITO.name, context)
     private val toolbarArrowIcon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_TOOLBAR_KEY, context)
@@ -134,6 +146,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     )
 
     init {
+        voiceStatusContainer.addView(
+            voiceStatusLabel,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        )
+        voiceStatusContainer.isGone = true
         val colors = Settings.getValues().mColors
 
         // expand key
@@ -255,6 +272,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         pinnedKeys.isVisible = showRows
         screenshotSuggestionContainer.isVisible =
             showRows && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
+        // Microphone status stays visible even when toolbar mode temporarily hides word rows.
+        voiceStatusContainer.isVisible = visibility == VISIBLE && voiceStatusActive
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
@@ -551,12 +570,29 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     // ---- Клавиатура: recording state (red pulsing mic + «Слушаю…» + level meter, tap to stop) ----
-    fun updateVoiceState(listening: Boolean, level: Float, text: String) {
-        val red = 0xFFE53935.toInt()
-        val scale = if (listening) 1f + 0.35f * level.coerceIn(0f, 1f) else 1f
+    fun updateVoiceState(starting: Boolean, listening: Boolean, level: Float, text: String) {
+        voiceStatusActive = starting || listening
+        voiceStatusLabel.text = when {
+            starting -> "Запуск…"
+            listening -> "● Слушаю"
+            else -> ""
+        }
+        val statusColor = if (starting) 0xFFB7791F.toInt() else 0xFFE53935.toInt()
+        voiceStatusLabel.background = GradientDrawable().apply {
+            setColor(statusColor)
+            cornerRadius = 8 * resources.displayMetrics.density
+        }
+        syncSuggestionAreaVisibility()
+
+        val micColor = when {
+            starting -> statusColor
+            listening -> 0xFFE53935.toInt()
+            else -> null
+        }
+        val scale = if (listening) 1f + 0.25f * level.coerceIn(0f, 1f) else 1f
         for (g in listOf(toolbar, pinnedKeys)) (g.findViewWithTag<View>(ToolbarKey.VOICE) as? android.widget.ImageView)?.let { v ->
-            if (listening) {
-                v.setColorFilter(red)
+            if (micColor != null) {
+                v.setColorFilter(micColor)
                 v.contentDescription = "Голосовой ввод: $text. Нажмите, чтобы остановить."
             } else {
                 v.clearColorFilter()
@@ -565,9 +601,6 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             v.scaleX = scale
             v.scaleY = scale
         }
-        // Do not place a full-width recording banner over this view: it obscures every
-        // dictionary suggestion while the microphone is listening. The pulsing red mic
-        // key is the recording indicator and remains tappable to stop dictation.
     }
 
     fun updateVoiceKey() {

@@ -51,6 +51,8 @@ class ClipboardHistoryManager(
 
     private var screenshotObserver: android.database.ContentObserver? = null
     @Volatile private var destroyed = false
+    @Volatile private var clearingHistory = false
+    @Volatile private var historyClearGeneration = 0L
     // MediaStore can be slow on vendor ROMs; never scan it on the keyboard's UI thread.
     private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
     private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
@@ -63,10 +65,12 @@ class ClipboardHistoryManager(
         try {
             screenshotObserver = ru.klaviatura.clip.Screenshots.observer(latinIME, screenshotHandler) { uri, ts, desc ->
                 // Observer callbacks run on screenshotWorker: don't copy/hash images on the UI thread.
-                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                    val generation = historyClearGeneration
                     val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
                     if (saved) mainHandler.post {
-                        if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                        if (!destroyed && !clearingHistory && generation == historyClearGeneration
+                                && latinIME.mSettings.current.mClipboardHistoryEnabled)
                             latinIME.refreshScreenshotSuggestion()
                     }
                     saved
@@ -78,16 +82,19 @@ class ClipboardHistoryManager(
     }
 
     fun onStartInputView() {
-        if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
+        if (!latinIME.mSettings.current.mClipboardHistoryEnabled || clearingHistory) return
         fetchPrimaryClip()
+        val generation = historyClearGeneration
         screenshotHandler.post {
             // Import historical screenshots without replacing the active suggestions.
             ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
-                !destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled &&
-                    clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
+                !destroyed && !clearingHistory && generation == historyClearGeneration
+                    && latinIME.mSettings.current.mClipboardHistoryEnabled
+                    && clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
             }
             mainHandler.post {
-                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                if (!destroyed && !clearingHistory && generation == historyClearGeneration
+                        && latinIME.mSettings.current.mClipboardHistoryEnabled)
                     latinIME.refreshScreenshotSuggestion()
             }
         }
@@ -103,6 +110,8 @@ class ClipboardHistoryManager(
     }
 
     override fun onPrimaryClipChanged() {
+        // Ignore the system callback produced by our own clear operation.
+        if (clearingHistory) return
         // Make sure we read clipboard content only if history settings is set
         if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
             fetchPrimaryClip()
@@ -114,7 +123,7 @@ class ClipboardHistoryManager(
     //  setting whether to store sensitive clip data?
     //  care about other clip items than first?
     private fun fetchPrimaryClip() {
-        if (tempPrimaryClip) return // avoid updating history
+        if (tempPrimaryClip || clearingHistory) return // avoid updating history while swapping/clearing clips
         val clipData = try { clipboardManager.primaryClip } catch (e: Exception) { null } ?: return
         if (clipData.itemCount == 0) return
         val description = clipData.description ?: return
@@ -194,9 +203,23 @@ class ClipboardHistoryManager(
     }
 
     fun clearHistory() {
-        clipboardDao?.clearNonPinned()
-        ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
-        removeClipboardSuggestion()
+        // Screenshot imports share one worker. Clear behind an import already in progress,
+        // and cancel queued retries so an old MediaStore scan cannot repopulate the buffer.
+        val generation = ++historyClearGeneration
+        clearingHistory = true
+        screenshotHandler.removeCallbacksAndMessages(null)
+        screenshotHandler.post {
+            clipboardDao?.clear()
+            mainHandler.post {
+                if (destroyed || generation != historyClearGeneration) return@post
+                screenshotSuggestionView = null
+                screenshotSuggestionFilename = null
+                ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
+                removeClipboardSuggestion()
+                latinIME.refreshScreenshotSuggestion()
+                clearingHistory = false
+            }
+        }
     }
 
     fun canRemove(index: Int) = clipboardDao?.isPinned(index) == false

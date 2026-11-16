@@ -237,11 +237,24 @@ class ClipboardDao private constructor(private val db: Database) {
         listener?.onClipsRemoved(indicesToRemove[0], indicesToRemove.size)
     }
 
-    fun clear() {
-        if (count() == 0) return
+    fun clear() = synchronized(this) {
+        val removedCount = cache.size
+        val removedEntries = cache.toList()
         cache.clear()
-        listener?.onClipsRemoved(0, count())
         db.writableDatabase.delete(TABLE, null, null)
+
+        // Delete every stored file, including orphaned files left by interrupted imports.
+        runCatching {
+            clipFilesDir.listFiles()?.forEach { file ->
+                if (file.isFile) file.delete()
+            }
+        }
+        removedEntries.forEach { entry ->
+            if (entry.filename != null) File(clipFilesDir, entry.filename).delete()
+        }
+
+        if (removedCount > 0)
+            dispatchListener { it.onClipsRemoved(0, removedCount) }
     }
 
     fun cleanupFiles(prefs: SharedPreferences) {

@@ -240,7 +240,7 @@
     <string name="split_spacer_scale">Расстояние разделения</string>
     <string name="prefs_always_show_suggestions_summary">Игнорировать запросы других приложений на отключение подсказок (может вызвать проблемы)</string>
     <string name="switch_language">Смена языка</string>
-    <string name="clear_clipboard" tools:keep="@string/clear_clipboard">Очистить буфер обмена</string>
+    <string name="clear_clipboard" tools:keep="@string/clear_clipboard">Очистить весь буфер обмена</string>
     <string name="day_or_night_night">Ночь</string>
     <string name="no_dictionary_dont_show_again_button">Больше не показывать</string>
     <string name="disable_personalized_dicts_message">Внимание: отключение этой настройки приведёт к удалению изученных данных</string>

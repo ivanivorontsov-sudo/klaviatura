@@ -40,6 +40,8 @@ object VoiceInput {
     private val main = Handler(Looper.getMainLooper())
     private var ctx: Context? = null
     @Volatile var listening = false; private set
+    /** True until AudioRecord has started and audio is actually being captured. */
+    @Volatile var starting = false; private set
     @Volatile private var stopRequested = false
     @Volatile private var restartLang: String? = null
     private val loaded = HashMap<String, Model>()
@@ -78,9 +80,13 @@ object VoiceInput {
     const val PREF_ENGINE_VOSK = "kl_voice_engine_vosk"
     fun engineKey(lang: String) = if (lang == "ru" && ctx?.prefs()?.getBoolean(PREF_ENGINE_VOSK, false) != true) ModelDownloader.ZIP_RU else lang
 
-    fun toggle(t: VoiceTarget) { if (listening) stop() else start(t) }
+    fun toggle(t: VoiceTarget) { if (listening || starting) stop() else start(t) }
 
-    fun stop() { stopRequested = true; refresh() }
+    fun stop() {
+        if (!listening && !starting) return
+        stopRequested = true
+        refresh()
+    }
 
     /** layout switched -> switch voice language immediately */
     fun onLayoutChanged() {
@@ -91,6 +97,7 @@ object VoiceInput {
     private fun toast(s: String) = main.post { ctx?.let { Toast.makeText(it, s, Toast.LENGTH_SHORT).show() } }
 
     fun start(t: VoiceTarget) {
+        if (listening || starting) return
         val c = ctx ?: return
         val lang = currentLang()
         if (!supported(lang)) { toast("Голос для языка «$lang» пока не поддерживается"); return }
@@ -112,7 +119,10 @@ object VoiceInput {
         }
         val generation = sessionGeneration.incrementAndGet()
         outputRevision.set(0L)
-        listening = true; stopRequested = false; restartLang = null
+        listening = true
+        starting = true
+        stopRequested = false
+        restartLang = null
         onStateChanged?.invoke()
         thread(name = "kl-voice") { runLoop(langs, t, generation) }
     }
@@ -162,7 +172,11 @@ object VoiceInput {
 
     /** microphone level 0..1 for the recording indicator */
     @Volatile var level = 0f; private set
-    fun statusText() = if (listening) "Слушаю… (${currentLang().uppercase()})" else ""
+    fun statusText() = when {
+        starting -> "Микрофон запускается. Начинайте говорить после сигнала «Слушаю»."
+        listening -> "Слушаю… (${currentLang().uppercase()})"
+        else -> ""
+    }
 
     private fun asr(key: String, rate: Float): Asr =
         if (key == ModelDownloader.ZIP_RU) SherpaAsr(sherpa(key), rate.toInt()) else VoskAsr(model(key), rate)
@@ -254,6 +268,9 @@ object VoiceInput {
             val commands = ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false
             session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands)
             rec.startRecording()
+            // Do not claim to be listening while the recorder and recognizer are still starting.
+            starting = false
+            refresh()
             val buf = ShortArray(1600) // 100 ms
             var lastUi = 0L
             var lastVoice = System.currentTimeMillis()
@@ -289,6 +306,7 @@ object VoiceInput {
             main.post {
                 if (sessionGeneration.get() == generation) {
                     voiceTarget.endVoice()
+                    starting = false
                     listening = false
                     onStateChanged?.invoke()
                 }

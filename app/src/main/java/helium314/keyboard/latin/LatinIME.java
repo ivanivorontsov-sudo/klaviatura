@@ -722,7 +722,15 @@ public class LatinIME extends InputMethodService implements
             frozenPrefix = "";
             voiceSessionActive = false;
             voiceConnection = null;
-            mHandler.postDelayed(() -> mVoiceSettling = false, 400);
+            // Selection callbacks are ignored while the recognizer settles. Rebuild the
+            // word suggestions explicitly afterwards instead of waiting for unrelated input.
+            mHandler.postDelayed(() -> {
+                if (ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()
+                        || ru.klaviatura.voice.VoiceInput.INSTANCE.getStarting()) return;
+                mVoiceSettling = false;
+                if (isInputViewShown() && hasSuggestionStripView())
+                    mHandler.postResumeSuggestions(false);
+            }, 180);
         }
     };
     private boolean mVoiceSettling = false;
@@ -755,7 +763,9 @@ public class LatinIME extends InputMethodService implements
             final helium314.keyboard.keyboard.MainKeyboardView v = mKeyboardSwitcher.getMainKeyboardView();
             if (v != null) v.invalidateAllKeys();
             if (mSuggestionStripView != null) mSuggestionStripView.updateVoiceState(
-                    ru.klaviatura.voice.VoiceInput.INSTANCE.getListening(), ru.klaviatura.voice.VoiceInput.INSTANCE.getLevel(),
+                    ru.klaviatura.voice.VoiceInput.INSTANCE.getStarting(),
+                    ru.klaviatura.voice.VoiceInput.INSTANCE.getListening(),
+                    ru.klaviatura.voice.VoiceInput.INSTANCE.getLevel(),
                     ru.klaviatura.voice.VoiceInput.INSTANCE.statusText());
             return kotlin.Unit.INSTANCE; });
         mSettings.startListener();
@@ -1084,6 +1094,9 @@ public class LatinIME extends InputMethodService implements
 
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
+        // Delayed work belongs to the previous editor if it survived a hide/app switch.
+        mHandler.cancelUpdateSuggestionStrip();
+        mHandler.cancelResumeSuggestions();
 
         setGestureDataGatheringMode(editorInfo, restarting);
 
@@ -1184,7 +1197,7 @@ public class LatinIME extends InputMethodService implements
                 // work around this bug.
                 mInputLogic.mConnection.tryFixIncorrectCursorPosition();
                 if (mInputLogic.mConnection.isCursorTouchingWord(currentSettingsValues.mSpacingAndPunctuations, true)) {
-                    mHandler.postResumeSuggestions(true /* shouldDelay */);
+                    mHandler.postResumeSuggestions(false /* update current editor immediately */);
                 }
                 needToCallLoadKeyboardLater = false;
             }
@@ -1246,6 +1259,9 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onWindowHidden() {
         super.onWindowHidden();
+        // A delayed callback from a hidden editor must not repaint suggestions over another app.
+        mHandler.cancelUpdateSuggestionStrip();
+        mHandler.cancelResumeSuggestions();
         Log.i(TAG, "onWindowHidden");
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
@@ -1272,8 +1288,9 @@ public class LatinIME extends InputMethodService implements
     }
 
     private void cleanupInternalStateForFinishInput() {
-        // Remove pending messages related to update suggestions
+        // No delayed suggestion task may outlive the editor it was created for.
         mHandler.cancelUpdateSuggestionStrip();
+        mHandler.cancelResumeSuggestions();
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
@@ -1315,7 +1332,7 @@ public class LatinIME extends InputMethodService implements
                 mInputLogic.finishInput();
                 mInputLogic.mConnection.resetCachesUponCursorMoveAndReturnSuccess(newSelStart, newSelEnd, false);
                 mVoiceTarget.afterManualEdit();
-                mHandler.postResumeSuggestions(true);
+                // Suggestions are refreshed once at voice-session end, not during recognizer callbacks.
             }
             return;
         }
