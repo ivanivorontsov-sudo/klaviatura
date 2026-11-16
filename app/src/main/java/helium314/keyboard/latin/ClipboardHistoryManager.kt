@@ -71,7 +71,7 @@ class ClipboardHistoryManager(
             fetchPrimaryClip()
     }
 
-refreshStripForImage method    fun onStartInputView() {
+    fun onStartInputView() {
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
         fetchPrimaryClip()
         screenshotHandler.post {
