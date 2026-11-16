@@ -483,6 +483,11 @@ public class LatinIME extends InputMethodService implements
 
         public void onStartInputView(final EditorInfo editorInfo, final boolean restarting) {
             if (hasMessages(MSG_PENDING_IMS_CALLBACK)
+                    && editorInfo != null && mAppliedEditorInfo != null
+                    // Keyboard-equivalent editors in different apps are not duplicate callbacks.
+                    // Do not discard a real app switch while an orientation callback is pending.
+                    && java.util.Objects.equals(editorInfo.packageName, mAppliedEditorInfo.packageName)
+                    && editorInfo.fieldId == mAppliedEditorInfo.fieldId
                     && KeyboardId.Companion.equivalentEditorInfoForKeyboard(editorInfo, mAppliedEditorInfo)) {
                 // Typically this is the second onStartInputView after orientation changed.
                 resetPendingImsCallback();
