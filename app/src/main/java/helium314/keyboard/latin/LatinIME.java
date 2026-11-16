@@ -1279,9 +1279,10 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onWindowHidden() {
         super.onWindowHidden();
-        // A delayed callback from a hidden editor must not repaint suggestions over another app.
-        mHandler.cancelUpdateSuggestionStrip();
-        mHandler.cancelResumeSuggestions();
+        // The old editor's pending work is cancelled in onFinishInputViewInternal().
+        // Do not cancel suggestion work here: onWindowHidden is a window callback, not an
+        // editor-identity callback, and a late hide notification must not cancel work that
+        // has already been scheduled for the newly focused application's editor.
         Log.i(TAG, "onWindowHidden");
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
