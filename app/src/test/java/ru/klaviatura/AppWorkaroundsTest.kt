@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-package helium314.keyboard.compat
+package ru.klaviatura
 
 import android.text.InputType
+import helium314.keyboard.compat.AppWorkarounds
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
