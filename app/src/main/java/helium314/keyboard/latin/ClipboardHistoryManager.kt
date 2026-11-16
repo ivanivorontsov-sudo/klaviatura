@@ -316,7 +316,8 @@ class ClipboardHistoryManager(
         imageView.setOnClickListener(onClick)
         binding.root.setOnClickListener(onClick)
         styleSuggestion(binding, textView) {
-            dismissImageSuggestion(entry)
+            // The close button dismisses the whole current screenshot batch, not just this file.
+            dismissAllRecentImageSuggestions()
             screenshotSuggestionView = null
             screenshotSuggestionFilename = null
             latinIME.refreshScreenshotSuggestion()
@@ -348,12 +349,46 @@ class ClipboardHistoryManager(
     }
 
     private fun dismissImageSuggestion(entry: ClipboardHistoryEntry) {
-        // Dismiss one file only: MediaStore DATE_ADDED may give several screenshots the same second.
+        // Pasting one image dismisses only that image; the next queued image can still be offered.
         val filename = entry.filename ?: return
         val prefs = latinIME.prefs()
         val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet()).orEmpty().toMutableSet()
         if (dismissed.add(filename))
             prefs.edit().putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed).apply()
+    }
+
+    /**
+     * The close button dismisses the complete current screenshot batch.
+     *
+     * MediaStore DATE_ADDED has only second precision and imports can be delayed by the
+     * screenshot observer. Store a cutoff at the end of the current second as well as
+     * the known filenames, so a late import of an already-created screenshot cannot
+     * immediately reopen the dismissed batch. A screenshot created in a later second
+     * has a newer timestamp and becomes eligible normally.
+     */
+    private fun dismissAllRecentImageSuggestions() {
+        val now = System.currentTimeMillis()
+        val prefs = latinIME.prefs()
+        val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet())
+            .orEmpty().toMutableSet()
+        val recentFiles = clipboardDao?.getAll().orEmpty()
+            .asSequence()
+            .filter { entry ->
+                entry.filename != null &&
+                    entry.mimeTypes?.any { it.startsWith("image/") } == true &&
+                    now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
+            }
+            .mapNotNull { it.filename }
+            .toSet()
+        dismissed.addAll(recentFiles)
+        screenshotSuggestionFilename?.let { dismissed.add(it) }
+
+        val cutoff = (now / 1000L + 1L) * 1000L - 1L
+        val previousCutoff = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
+        prefs.edit()
+            .putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed)
+            .putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, maxOf(previousCutoff, cutoff))
+            .apply()
     }
 
     private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
