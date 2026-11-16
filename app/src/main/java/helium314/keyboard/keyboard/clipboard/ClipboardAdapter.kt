@@ -60,7 +60,7 @@ class ClipboardAdapter(
                 it.filename != null && it.mimeTypes?.any { type -> type.startsWith("image/") } == true
             }
             ClipboardFilter.FILES -> all.filter {
-                it.filename != null && it.mimeTypes?.none { type -> type.startsWith("image/") } == true
+                it.filename != null && it.mimeTypes?.any { type -> !type.startsWith("image/") } != false
             }
             ClipboardFilter.PINNED -> all.filter { it.isPinned }
         }
@@ -115,7 +115,7 @@ class ClipboardAdapter(
             contentImageView = view.findViewById(R.id.clipboard_entry_image_content)
             timestampView = view.findViewById(R.id.clipboard_entry_timestamp)
             deleteButton = view.findViewById<TextView>(R.id.clipboard_entry_delete).apply {
-                contentDescription = view.context.getString(R.string.clipboard_history_delete_entry)
+                contentDescription = "Удалить запись из буфера"
                 setOnClickListener {
                     val id = itemView.tag as? Long ?: return@setOnClickListener
                     clipboardHistoryManager?.deleteHistoryEntry(id)
