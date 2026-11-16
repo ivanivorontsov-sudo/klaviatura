@@ -45,6 +45,7 @@ class ClipboardHistoryManager(
     private lateinit var clipboardManager: ClipboardManager
     private var clipboardSuggestionView: View? = null
     private var screenshotSuggestionView: View? = null
+    private var screenshotSuggestionFilename: String? = null
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
 
@@ -245,8 +246,16 @@ class ClipboardHistoryManager(
     /** A recent screenshot is rendered as a compact extra item beside the live word suggestions. */
     fun getRecentScreenshotSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup?): View? {
         if (!latinIME.mSettings.current.mSuggestClipboardContent || parent == null) return null
-        screenshotSuggestionView = null
-        return recentImageSuggestionView(editorInfo, parent)
+        val entry = recentImageEntry()
+        if (entry == null) {
+            screenshotSuggestionView = null
+            screenshotSuggestionFilename = null
+            return null
+        }
+        if (entry.filename == screenshotSuggestionFilename) {
+            screenshotSuggestionView?.let { return it }
+        }
+        return recentImageSuggestionView(editorInfo, parent, entry)
     }
 
     /** newest image clip of the last minutes (screenshots go only into the history, not into the primary clip) */
@@ -267,10 +276,11 @@ class ClipboardHistoryManager(
             ?.maxByOrNull { it.timeStamp }
     }
 
-    private fun recentImageSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup): View? {
+    private fun recentImageSuggestionView(
+        editorInfo: EditorInfo?, parent: ViewGroup, entry: ClipboardHistoryEntry
+    ): View? {
         val inputType = editorInfo?.inputType ?: InputType.TYPE_NULL
         if (InputTypeUtils.isNumberInputType(inputType) || InputTypeUtils.isPasswordInputType(inputType)) return null
-        val entry = recentImageEntry() ?: return null
         val file = java.io.File(ClipboardDao.clipFilesDir, entry.filename!!)
         if (!file.isFile) return null
         val binding = ClipboardSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
@@ -300,6 +310,7 @@ class ClipboardHistoryManager(
             try { latinIME.mKeyboardActionListener.onContent(entry.getContentInfo(latinIME)) } catch (e: Exception) { Log.w(TAG, "paste image", e) }
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
             screenshotSuggestionView = null
+            screenshotSuggestionFilename = null
             latinIME.refreshScreenshotSuggestion()
         }
         imageView.setOnClickListener(onClick)
@@ -307,6 +318,7 @@ class ClipboardHistoryManager(
         styleSuggestion(binding, textView) {
             dismissImageSuggestion(entry)
             screenshotSuggestionView = null
+            screenshotSuggestionFilename = null
             latinIME.refreshScreenshotSuggestion()
         }
         val closeSize = (22 * density).toInt()
@@ -314,6 +326,7 @@ class ClipboardHistoryManager(
         binding.clipboardSuggestionClose.layoutParams.height = closeSize
         binding.clipboardSuggestionClose.contentDescription = "Скрыть предложение скриншота"
         screenshotSuggestionView = binding.root
+        screenshotSuggestionFilename = entry.filename
         return screenshotSuggestionView
     }
 

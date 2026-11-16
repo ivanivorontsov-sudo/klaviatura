@@ -256,6 +256,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     /** Adds a compact image chip beside words without replacing the live suggestion strip. */
     fun setInlineSuggestionView(view: View?) {
+        if (inlineSuggestionView === view) {
+            attachInlineSuggestionView()
+            return
+        }
         inlineSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
         inlineSuggestionView = view
         attachInlineSuggestionView()
