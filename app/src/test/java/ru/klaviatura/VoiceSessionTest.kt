@@ -39,6 +39,9 @@ class VoiceSessionTest {
         assertEquals("салфеткой", VoiceText.afterCommittedPrefix("спиртовой салфеткой", "спиртовой"))
         assertEquals("салфеткой", VoiceText.afterCommittedPrefix("СПИРТОВОЙ салфеткой", "спиртовой"))
         assertEquals("", VoiceText.afterCommittedPrefix("спиртовой", "спиртовой"))
+        assertEquals("салфеткой потом", VoiceText.afterCommittedPrefix("спиртовой салфеткой потом", "спиртовой"))
+        // A recognizer may revise a manually committed prefix; never replay it at the new caret.
+        assertEquals("салфеткой", VoiceText.afterCommittedPrefix("спиртовая салфеткой", "спиртовой"))
     }
 
     @Test fun noiseLoopIsRemoved() {

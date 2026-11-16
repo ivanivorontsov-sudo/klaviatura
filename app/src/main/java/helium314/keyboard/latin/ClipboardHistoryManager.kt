@@ -44,6 +44,7 @@ class ClipboardHistoryManager(
 
     private lateinit var clipboardManager: ClipboardManager
     private var clipboardSuggestionView: View? = null
+    private var screenshotSuggestionView: View? = null
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
 
@@ -52,6 +53,7 @@ class ClipboardHistoryManager(
     // MediaStore can be slow on vendor ROMs; never scan it on the keyboard's UI thread.
     private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
     private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -62,7 +64,10 @@ class ClipboardHistoryManager(
                 // Observer callbacks run on screenshotWorker: don't copy/hash images on the UI thread.
                 if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled) {
                     val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
-                    // Saving a screenshot must never replace the active word-suggestion strip.
+                    if (saved) mainHandler.post {
+                        if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                            latinIME.refreshScreenshotSuggestion()
+                    }
                     saved
                 } else false
             }
@@ -75,10 +80,14 @@ class ClipboardHistoryManager(
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
         fetchPrimaryClip()
         screenshotHandler.post {
-            // Import historical screenshots silently. Do not reset suggestions or replace the strip.
+            // Import historical screenshots without replacing the active suggestions.
             ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
                 !destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled &&
                     clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
+            }
+            mainHandler.post {
+                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                    latinIME.refreshScreenshotSuggestion()
             }
         }
     }
@@ -88,6 +97,7 @@ class ClipboardHistoryManager(
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
         screenshotHandler.removeCallbacksAndMessages(null)
+        mainHandler.removeCallbacksAndMessages(null)
         screenshotWorker.quitSafely()
     }
 
@@ -232,6 +242,13 @@ class ClipboardHistoryManager(
         return primary ?: screenshotPermissionView(parent)
     }
 
+    /** A recent screenshot is rendered as a compact extra item beside the live word suggestions. */
+    fun getRecentScreenshotSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup?): View? {
+        if (!latinIME.mSettings.current.mSuggestClipboardContent || parent == null) return null
+        screenshotSuggestionView = null
+        return recentImageSuggestionView(editorInfo, parent)
+    }
+
     /** newest image clip of the last minutes (screenshots go only into the history, not into the primary clip) */
     fun recentImageEntry(now: Long = System.currentTimeMillis()): ClipboardHistoryEntry? {
         val prefs = latinIME.prefs()
@@ -270,24 +287,34 @@ class ClipboardHistoryManager(
         imageView.isVisible = true
         imageView.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
         imageView.adjustViewBounds = false
-        imageView.layoutParams = imageView.layoutParams.apply { height = h; width = (h * 1.3f).toInt() }
+        val density = latinIME.resources.displayMetrics.density
+        binding.root.setPadding(0, 0, 0, 0)
+        binding.root.layoutParams = android.widget.LinearLayout.LayoutParams((70 * density).toInt(), ViewGroup.LayoutParams.MATCH_PARENT)
+        imageView.layoutParams = android.widget.LinearLayout.LayoutParams((42 * density).toInt(), (42 * density).toInt())
         imageView.setImageBitmap(bmp)
-        imageView.contentDescription = entry.text ?: "image"
-        textView.layoutParams = (textView.layoutParams as android.widget.LinearLayout.LayoutParams).apply { width = ViewGroup.LayoutParams.WRAP_CONTENT; weight = 0f }
-        textView.text = if (entry.text?.contains("Скрин") == true) "Скриншот" else "Картинка"
+        imageView.contentDescription = "Вставить скриншот"
+        // The compact chip takes one narrow slot; word suggestions keep their own slots.
+        textView.isGone = true
         val onClick = View.OnClickListener {
             dismissImageSuggestion(entry)
             try { latinIME.mKeyboardActionListener.onContent(entry.getContentInfo(latinIME)) } catch (e: Exception) { Log.w(TAG, "paste image", e) }
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
-            binding.root.isGone = true
-            latinIME.setNeutralSuggestionStrip()
-            latinIME.mHandler.postResumeSuggestions(false)
+            screenshotSuggestionView = null
+            latinIME.refreshScreenshotSuggestion()
         }
         imageView.setOnClickListener(onClick)
-        textView.setOnClickListener(onClick)
-        styleSuggestion(binding, textView) { dismissImageSuggestion(entry); removeClipboardSuggestion(suppressPrimary = false) }
-        clipboardSuggestionView = binding.root
-        return clipboardSuggestionView
+        binding.root.setOnClickListener(onClick)
+        styleSuggestion(binding, textView) {
+            dismissImageSuggestion(entry)
+            screenshotSuggestionView = null
+            latinIME.refreshScreenshotSuggestion()
+        }
+        val closeSize = (22 * density).toInt()
+        binding.clipboardSuggestionClose.layoutParams.width = closeSize
+        binding.clipboardSuggestionClose.layoutParams.height = closeSize
+        binding.clipboardSuggestionClose.contentDescription = "Скрыть предложение скриншота"
+        screenshotSuggestionView = binding.root
+        return screenshotSuggestionView
     }
 
     /** an IME can't ask for permissions itself: offer a one-tap way to allow screenshots in the clipboard */

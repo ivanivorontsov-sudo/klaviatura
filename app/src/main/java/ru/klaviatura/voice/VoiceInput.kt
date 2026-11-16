@@ -18,6 +18,7 @@ import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
@@ -43,8 +44,12 @@ object VoiceInput {
     @Volatile private var restartLang: String? = null
     private val loaded = HashMap<String, Model>()
     private val downloading = HashSet<String>()
-    var target: VoiceTarget? = null
+    private val sessionGeneration = AtomicLong(0L)
+    private val outputRevision = AtomicLong(0L)
     var onStateChanged: (() -> Unit)? = null
+
+    /** Drop recognizer callbacks queued before the user edited text or moved the caret. */
+    fun invalidatePendingOutput() { outputRevision.incrementAndGet() }
 
     fun init(context: Context) { ctx = context.applicationContext }
 
@@ -102,9 +107,15 @@ object VoiceInput {
             return
         }
         if (missing.isNotEmpty()) return
+        if (!t.beginSession()) {
+            toast("Не удалось закрепить поле ввода. Нажмите микрофон ещё раз.")
+            return
+        }
+        val generation = sessionGeneration.incrementAndGet()
+        outputRevision.set(0L)
         listening = true; stopRequested = false; restartLang = null
         onStateChanged?.invoke()
-        thread(name = "kl-voice") { runLoop(langs) }
+        thread(name = "kl-voice") { runLoop(langs, t, generation) }
     }
 
     /** download progress per language, shown on the mic key: 0..100, or -1 = unzipping */
@@ -218,12 +229,24 @@ object VoiceInput {
         throw IllegalStateException("микрофон недоступен")
     }
 
-    private fun runLoop(initial: List<String>) {
+    private fun runLoop(initial: List<String>, voiceTarget: VoiceTarget, generation: Long) {
         var rec: AudioRecord? = null
         var session: VoiceSession? = null
         val out = object : VoiceOutput {
-            override fun partial(text: String) { main.post { target?.showPartial(text) } }
-            override fun commit(text: String) { main.post { target?.commitPhrase(text) } }
+            override fun partial(text: String) {
+                val revision = outputRevision.get()
+                main.post {
+                    if (sessionGeneration.get() == generation && outputRevision.get() == revision && listening)
+                        voiceTarget.showPartial(text)
+                }
+            }
+            override fun commit(text: String) {
+                val revision = outputRevision.get()
+                main.post {
+                    if (sessionGeneration.get() == generation && outputRevision.get() == revision && listening)
+                        voiceTarget.commitPhrase(text)
+                }
+            }
         }
         try {
             rec = openRecorder()
@@ -263,8 +286,14 @@ object VoiceInput {
         } finally {
             try { rec?.stop(); rec?.release() } catch (_: Exception) {}
             session?.close()
-            listening = false; level = 0f
-            main.post { target?.endVoice(); onStateChanged?.invoke() }
+            level = 0f
+            main.post {
+                if (sessionGeneration.get() == generation) {
+                    voiceTarget.endVoice()
+                    listening = false
+                    onStateChanged?.invoke()
+                }
+            }
         }
     }
 
@@ -272,10 +301,14 @@ object VoiceInput {
 
 /** implemented by the IME: where voice text goes */
 interface VoiceTarget {
+    /** Capture the editor before asynchronous recognizer callbacks begin. */
+    fun beginSession(): Boolean
     fun showPartial(text: String)
     fun commitPhrase(text: String)
     /** Freeze the current partial before the user types or moves the caret. */
     fun finishPartialForManualEdit()
+    /** True when the selection update was caused by our most recent voice write. */
+    fun isExpectedSelection(start: Int, end: Int): Boolean
     fun endVoice()
 }
 

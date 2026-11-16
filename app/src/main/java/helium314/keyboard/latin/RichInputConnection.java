@@ -290,6 +290,14 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         mExpectedSelEnd = et.selectionEnd + et.startOffset;
     }
 
+    /** Re-synchronize IME caches after direct InputConnection edits such as voice dictation. */
+    public boolean resetCachesAfterExternalTextChange() {
+        mComposingText.setLength(0);
+        if (!reloadTextCache()) return false;
+        reloadCursorPosition();
+        return isCursorPositionKnown();
+    }
+
     private void checkBatchEdit() {
         if (mNestLevel != 1) {
             // TODO: exception instead

@@ -183,6 +183,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var suggestedWords = SuggestedWords.getEmptyInstance()
     private var startIndexOfMoreSuggestions = 0
     private var isExternalSuggestionVisible = false // Required to disable the more suggestions if other suggestions are visible
+    private var inlineSuggestionView: View? = null
     private val layoutHelper = SuggestionStripLayoutHelper(context, attrs, defStyle, wordViews, dividerViews, debugInfoViews)
     private val moreSuggestionsView = moreSuggestionsContainer.findViewById<MoreSuggestionsView>(R.id.more_suggestions_view).apply {
         val slidingListener = object : SimpleOnGestureListener() {
@@ -250,6 +251,23 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         )
         isExternalSuggestionVisible = false
         updateKeys()
+        attachInlineSuggestionView()
+    }
+
+    /** Adds a compact image chip beside words without replacing the live suggestion strip. */
+    fun setInlineSuggestionView(view: View?) {
+        inlineSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
+        inlineSuggestionView = view
+        attachInlineSuggestionView()
+    }
+
+    private fun attachInlineSuggestionView() {
+        val view = inlineSuggestionView ?: return
+        if (isExternalSuggestionVisible || view.parent === suggestionsStrip) return
+        (view.parent as? ViewGroup)?.removeView(view)
+        val width = (70 * resources.displayMetrics.density).toInt()
+        suggestionsStrip.addView(view, LinearLayout.LayoutParams(width, LayoutParams.MATCH_PARENT))
+        if (!toolbarContainer.isVisible) suggestionsStrip.isVisible = true
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
