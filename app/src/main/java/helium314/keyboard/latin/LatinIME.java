@@ -1150,7 +1150,7 @@ public class LatinIME extends InputMethodService implements
                     + " app=" + editorInfo.packageName
                     + " inputType=0x" + Integer.toHexString(currentSettingsValues.mInputAttributes.mInputType)
                     + " shouldShow=" + currentSettingsValues.mInputAttributes.mShouldShowSuggestions
-                    + " alwaysShowOverride=" + currentSettingsValues.mOverrideShowingSuggestions
+                    + " editorAllowsOverride=" + currentSettingsValues.mInputAttributes.mMayOverrideShowingSuggestions
                     + " suggestionsEnabled=" + currentSettingsValues.mSuggestionsEnabled
                     + " needsLookup=" + currentSettingsValues.needsToLookupSuggestions()
                     + " autoCorrect=" + currentSettingsValues.mAutoCorrectEnabled
