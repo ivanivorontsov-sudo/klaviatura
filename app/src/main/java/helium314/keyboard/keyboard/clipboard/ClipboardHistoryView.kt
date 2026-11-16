@@ -260,6 +260,12 @@ class ClipboardHistoryView @JvmOverloads constructor(
         }
     }
 
+    override fun onDetachedFromWindow() {
+        clearConfirmHandler.removeCallbacks(resetClearConfirmation)
+        clearConfirmationArmed = false
+        super.onDetachedFromWindow()
+    }
+
     override fun onClick(view: View) {
         if (view.tag is ToolbarKey) {
             onClickToolbarKey(view) {
