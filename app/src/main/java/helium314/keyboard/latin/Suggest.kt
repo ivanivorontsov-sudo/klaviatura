@@ -82,6 +82,7 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
         val trailingSingleQuotesCount = StringUtils.getTrailingSingleQuotesCount(typedWordString)
         val capsMode = getCapsModeForTyping(wordComposer, keyboard)
         val suggestionsContainer = ArrayList(suggestionResults)
+        capitalizeRussianProperNouns(suggestionsContainer, ngramContext, mDictionaryFacilitator.mainLocale)
         capitalizeAndAddTrailingSingleQuotes(suggestionsContainer, capsMode, trailingSingleQuotesCount, mDictionaryFacilitator.mainLocale)
         val capitalizedTypedWord = capitalize(typedWordString, capsMode, mDictionaryFacilitator.mainLocale)
 
@@ -282,6 +283,7 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
         val locale = mDictionaryFacilitator.mainLocale
         val capsMode = getCapsModeForGesture(wordComposer, keyboard)
         val suggestionsContainer = ArrayList(suggestionResults)
+        capitalizeRussianProperNouns(suggestionsContainer, ngramContext, mDictionaryFacilitator.mainLocale)
         replaceSingleLetterFirstSuggestion(suggestionsContainer)
 
         val rejected: SuggestedWordInfo?
@@ -376,6 +378,24 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
         private const val MAXIMUM_AUTO_CORRECT_LENGTH_FOR_GERMAN = 12
         // TODO: should we add Finnish here?
         private val sLanguageToMaximumAutoCorrectionWithSpaceLength = hashMapOf(Locale.GERMAN.language to MAXIMUM_AUTO_CORRECT_LENGTH_FOR_GERMAN)
+
+        private fun capitalizeRussianProperNouns(
+            suggestions: MutableList<SuggestedWordInfo>, ngramContext: NgramContext, locale: Locale
+        ) {
+            if (locale.language != "ru") return
+            val previousWord = ngramContext.getNthPrevWord(1)?.toString()
+            for (i in suggestions.indices) {
+                val info = suggestions[i]
+                val cased = ru.klaviatura.glide.GlideEngine.properCaseSuggestion(info.mWord, previousWord)
+                if (cased != info.mWord) {
+                    suggestions[i] = SuggestedWordInfo(
+                        cased, info.mPrevWordsContext, info.mScore, info.mKindAndFlags,
+                        info.mSourceDict, info.mIndexOfTouchPointOfSecondWord,
+                        info.mAutoCommitFirstWordConfidence
+                    )
+                }
+            }
+        }
 
         private fun capitalizeAndAddTrailingSingleQuotes(
             suggestions: ArrayList<SuggestedWordInfo>, capsMode: CapsMode, trailingSingleQuotesCount: Int, defaultLocale: Locale

@@ -59,6 +59,8 @@ object GlideEngine : GlideLearning {
 
     private val HELP_FORMS = setOf("помощь", "помощи", "помощью", "помощей", "помощам", "помощами", "помощах")
     private val CURATED_NEXT_WORDS = mapOf(
+        // High-confidence phrase repairs for Russian next-word predictions.
+        "гимн" to listOf("россии"),
         "спиртовой" to listOf("салфеткой", "салфетка"),
         "спиртовая" to listOf("салфетка", "салфеткой"),
         "спиртовые" to listOf("салфетки", "салфетками"),
@@ -106,13 +108,25 @@ object GlideEngine : GlideLearning {
         return !JniUtils.sHaveGestureLib || ctx.prefs().getBoolean(PREF_OWN_GLIDE, true)
     }
 
-    /** next-word predictions as suggestion infos (low score, so HeliBoard's own predictions keep priority) */
+    /** next-word predictions; curated phrase repairs outrank noisy corpus n-grams. */
     fun predictions(ngram: NgramContext): List<SuggestedWordInfo> {
         val prev = ngram.getNthPrevWord(1)?.toString() ?: return emptyList()
+        val normalizedPrev = prev.lowercase(Locale.ROOT).replace('ё', 'е')
+        val curated = CURATED_NEXT_WORDS[normalizedPrev].orEmpty().toSet()
         return predictNext(prev, 3).mapIndexed { i, w ->
-            SuggestedWordInfo(ru.klaviatura.text.Yo.fix(ProperNouns.case(w)), "", 100 - i, SuggestedWordInfo.KIND_PREDICTION, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            val score = if (w in curated) Int.MAX_VALUE - i else 100 - i
+            SuggestedWordInfo(
+                ru.klaviatura.text.Yo.fix(properCaseSuggestion(w, prev)),
+                "", score, SuggestedWordInfo.KIND_PREDICTION,
+                Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX,
+                SuggestedWordInfo.NOT_A_CONFIDENCE
+            )
         }
     }
+
+    /** Apply Russian proper-name casing consistently to native and custom suggestions. */
+    fun properCaseSuggestion(word: String, previousWord: String? = null): String =
+        ProperNouns.case(word, previousWord)
 
     fun suggest(keyboard: Keyboard, data: ComposedData, ngram: NgramContext, locales: List<Locale>): List<SuggestedWordInfo> {
         val keys = keyboard.sortedKeys.mapNotNull { k ->
@@ -156,7 +170,7 @@ object GlideEngine : GlideLearning {
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION
-            SuggestedWordInfo(ru.klaviatura.text.Yo.fix(ProperNouns.case(c.word, prevRaw)), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+            SuggestedWordInfo(ru.klaviatura.text.Yo.fix(properCaseSuggestion(c.word, prevRaw)), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
         }
     }
 

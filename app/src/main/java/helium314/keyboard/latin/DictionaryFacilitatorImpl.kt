@@ -527,8 +527,10 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
 
         includeAtLeastTwoWordSuggestions(suggestionResults, suggestionsArray, composedData.mTypedWord)
         if (composedData.mTypedWord.isEmpty()) {
-            val have = suggestionResults.map { it.mWord.lowercase() }.toHashSet()
-            val extra = ru.klaviatura.glide.GlideEngine.predictions(ngramContext).filter { it.mWord !in have }
+            val have = suggestionResults.map { it.mWord.lowercase(Locale.ROOT).replace('ё', 'е') }.toHashSet()
+            val extra = ru.klaviatura.glide.GlideEngine.predictions(ngramContext).filter {
+                it.mWord.lowercase(Locale.ROOT).replace('ё', 'е') !in have
+            }
             suggestionResults.addAll(extra)
         } else try {
             suggestionResults.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(composedData.mTypedWord, dictionaryGroups.map { it.locale.language }, suggestionResults.map { it.mScore }))

@@ -1,5 +1,6 @@
 package ru.klaviatura
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +37,17 @@ class GlideContextTest {
             assertFalse("$form should not block unrelated words", GlideEngine.isUnwantedHelpUkrainePair(form, "Украина"))
         }
         assertFalse(GlideEngine.isUnwantedHelpUkrainePair("здоровье", "Украине"))
+    }
+
+    @Test fun curatedHymnPredictionRanksRussiaAheadOfCorpusNoise() {
+        GlideEngine.import("b\\tгимн\\tукраины\\t1000\\n", true)
+        try {
+            val predictions = GlideEngine.predictNext("гимн", 3)
+            assertEquals("россии", predictions.first())
+            assertEquals("украины", predictions.getOrNull(1))
+        } finally {
+            GlideEngine.import("", true)
+        }
     }
 
     @Test fun contextFixesAmbiguousSwipes() {
