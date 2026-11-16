@@ -52,7 +52,6 @@ class ClipboardHistoryManager(
     // MediaStore can be slow on vendor ROMs; never scan it on the keyboard's UI thread.
     private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
     private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -63,10 +62,7 @@ class ClipboardHistoryManager(
                 // Observer callbacks run on screenshotWorker: don't copy/hash images on the UI thread.
                 if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled) {
                     val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
-                    if (saved) mainHandler.post {
-                        if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
-                            refreshStripForImage()
-                    }
+                    // Saving a screenshot must never replace the active word-suggestion strip.
                     saved
                 } else false
             }
@@ -75,29 +71,14 @@ class ClipboardHistoryManager(
             fetchPrimaryClip()
     }
 
-    /** a screenshot arrived while the keyboard is open: show its thumbnail right away (unless a word is being typed) */
-    private fun refreshStripForImage() {
-        try {
-            if (latinIME.isInputViewShown && latinIME.mInputLogic.getComposingLength() == 0) latinIME.setNeutralSuggestionStrip()
-        } catch (e: Throwable) { }
-    }
-
-    fun onStartInputView() {
+refreshStripForImage method    fun onStartInputView() {
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled) return
         fetchPrimaryClip()
         screenshotHandler.post {
-            var imported = false
+            // Import historical screenshots silently. Do not reset suggestions or replace the strip.
             ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
-                if (destroyed || !latinIME.mSettings.current.mClipboardHistoryEnabled) false
-                else {
-                    val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
-                    imported = imported || saved
-                    saved
-                }
-            }
-            if (imported) mainHandler.post {
-                if (!destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled)
-                    refreshStripForImage()
+                !destroyed && latinIME.mSettings.current.mClipboardHistoryEnabled &&
+                    clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
             }
         }
     }
@@ -107,7 +88,6 @@ class ClipboardHistoryManager(
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
         screenshotHandler.removeCallbacksAndMessages(null)
-        mainHandler.removeCallbacksAndMessages(null)
         screenshotWorker.quitSafely()
     }
 
@@ -247,7 +227,9 @@ class ClipboardHistoryManager(
         if (parent == null) return null
         val primary = if (dontShowCurrentSuggestion) null else primaryClipSuggestionView(editorInfo, parent)
         // Klaviatura 1.4.0: fresh screenshots / copied images from the history appear as a thumbnail above the keys
-        return primary ?: recentImageSuggestionView(editorInfo, parent) ?: screenshotPermissionView(parent)
+        // Screenshots stay available in clipboard history; automatically showing an image card here
+        // used to replace the live word predictions whenever a screenshot was imported.
+        return primary ?: screenshotPermissionView(parent)
     }
 
     /** newest image clip of the last minutes (screenshots go only into the history, not into the primary clip) */
