@@ -356,6 +356,11 @@ public class LatinIME extends InputMethodService implements
             removeMessages(MSG_RESUME_SUGGESTIONS);
         }
 
+        public void cancelPendingSuggestionResults() {
+            removeMessages(MSG_SHOW_GESTURE_PREVIEW_AND_SET_SUGGESTIONS);
+            removeMessages(MSG_UPDATE_TAIL_BATCH_INPUT_COMPLETED);
+        }
+
         public boolean hasPendingUpdateSuggestions() {
             return hasMessages(MSG_UPDATE_SUGGESTION_STRIP);
         }
@@ -1094,9 +1099,10 @@ public class LatinIME extends InputMethodService implements
 
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
-        // Delayed work belongs to the previous editor if it survived a hide/app switch.
+        // Delayed work and computed results belong to the previous editor if it survived a hide/app switch.
         mHandler.cancelUpdateSuggestionStrip();
         mHandler.cancelResumeSuggestions();
+        mHandler.cancelPendingSuggestionResults();
 
         setGestureDataGatheringMode(editorInfo, restarting);
 
@@ -1296,6 +1302,7 @@ public class LatinIME extends InputMethodService implements
         // No delayed suggestion task may outlive the editor it was created for.
         mHandler.cancelUpdateSuggestionStrip();
         mHandler.cancelResumeSuggestions();
+        mHandler.cancelPendingSuggestionResults();
         // Should do the following in onFinishInputInternal but until JB MR2 it's not called :(
         mInputLogic.finishInput();
         mKeyboardActionListener.resetMetaState();
