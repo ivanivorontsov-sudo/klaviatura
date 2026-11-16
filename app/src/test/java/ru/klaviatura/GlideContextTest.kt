@@ -40,10 +40,11 @@ class GlideContextTest {
     }
 
     @Test fun curatedHymnPredictionRanksRussiaAheadOfCorpusNoise() {
-        GlideEngine.import("b\\tгимн\\tукраины\\t1000\\n", true)
+        GlideEngine.import("b\tгимн\tукраины\t1000\n", true)
         try {
             val predictions = GlideEngine.predictNext("гимн", 3)
             assertEquals("россии", predictions.first())
+            assertEquals("России", GlideEngine.properCaseSuggestion(predictions.first(), "гимн"))
             assertEquals("украины", predictions.getOrNull(1))
         } finally {
             GlideEngine.import("", true)

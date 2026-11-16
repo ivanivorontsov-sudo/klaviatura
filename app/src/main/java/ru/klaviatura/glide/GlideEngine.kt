@@ -125,8 +125,16 @@ object GlideEngine : GlideLearning {
     }
 
     /** Apply Russian proper-name casing consistently to native and custom suggestions. */
-    fun properCaseSuggestion(word: String, previousWord: String? = null): String =
-        ProperNouns.case(word, previousWord)
+    fun properCaseSuggestion(word: String, previousWord: String? = null): String {
+        val cased = ProperNouns.case(word, previousWord)
+        if (cased != word) return cased
+        // The proper-name asset is loaded asynchronously; keep this high-confidence correction
+        // stable even during the short interval before that list is ready.
+        return when (word.lowercase(Locale.ROOT).replace('ё', 'е')) {
+            "россии" -> "России"
+            else -> word
+        }
+    }
 
     fun suggest(keyboard: Keyboard, data: ComposedData, ngram: NgramContext, locales: List<Locale>): List<SuggestedWordInfo> {
         val keys = keyboard.sortedKeys.mapNotNull { k ->
