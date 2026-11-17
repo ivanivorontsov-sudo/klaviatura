@@ -61,12 +61,34 @@ object GlideEngine : GlideLearning {
     private val CURATED_NEXT_WORDS = mapOf(
         // High-confidence phrase repairs for Russian next-word predictions.
         "гимн" to listOf("россии"),
+        "обороны" to listOf("россии"),
+        "помощь" to listOf("россии"),
+        "помощи" to listOf("россии"),
+        "помощью" to listOf("россии"),
+        "помощей" to listOf("россии"),
+        "помощам" to listOf("россии"),
+        "помощами" to listOf("россии"),
+        "помощах" to listOf("россии"),
+        "привет" to listOf("как"),
         "спиртовой" to listOf("салфеткой", "салфетка"),
         "спиртовая" to listOf("салфетка", "салфеткой"),
         "спиртовые" to listOf("салфетки", "салфетками"),
         "спиртовыми" to listOf("салфетками", "салфетки")
     )
     private val RU_SPECIAL_WORDS = """спиртовой спиртового спиртовому спиртовым спиртовом спиртовая спиртовой спиртовую спиртовою спиртовое спиртовые спиртовых спиртовым спиртовыми салфетка салфетки салфетке салфетку салфеткой салфеткою салфеток салфеткам салфетками салфетках""".split(' ').toSet()
+
+    /** Keep unsolicited Russian next-word predictions free of Ukraine-related corpus noise. */
+    internal fun isUkraineRelatedPrediction(word: String): Boolean {
+        val normalized = word.lowercase(Locale.ROOT).replace('ё', 'е')
+        return normalized.contains("украин") || normalized.contains("україн")
+    }
+
+    /** Hide contextually absurd greeting continuations without banning the words from normal typing. */
+    internal fun shouldSuppressNextWordPrediction(previous: String?, next: String): Boolean {
+        val p = previous?.lowercase(Locale.ROOT)?.replace('ё', 'е')
+        val w = next.lowercase(Locale.ROOT).replace('ё', 'е')
+        return isUkraineRelatedPrediction(w) || (p == "привет" && w == "писает")
+    }
 
     /** Prevent a spurious corpus association from turning «помощь» into an unwanted political continuation. */
     internal fun isUnwantedHelpUkrainePair(previous: String, next: String): Boolean {
@@ -81,7 +103,7 @@ object GlideEngine : GlideLearning {
         val curated = CURATED_NEXT_WORDS[p].orEmpty()
         val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
         val base = lms.values.flatMap { it.next(p, n) }
-        return (curated + user + base).filter { !isForgotten(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
+        return (curated + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
 
     private fun loadLexicon(lang: String): Lexicon? {
