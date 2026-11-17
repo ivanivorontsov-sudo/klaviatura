@@ -15,7 +15,7 @@ android {
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 28
+        versionCode = 29
         versionName = "1.5.6"
         ndk {
             abiFilters.clear()
