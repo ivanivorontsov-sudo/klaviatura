@@ -13,6 +13,10 @@ on:
       - '.github/workflows/build-update-apk.yml'
   workflow_dispatch:
 
+concurrency:
+  group: klaviatura-update-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -32,6 +36,7 @@ jobs:
         run: ./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.klaviatura.*'
 
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
