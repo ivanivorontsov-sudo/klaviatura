@@ -493,7 +493,9 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             val res = SuggestionResults(SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false)
             res.addAll(own)
             res.mRawSuggestions?.addAll(own)
-            res.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
+            val blocked = { word: String -> ru.klaviatura.text.Profanity.blocks(word) }
+            res.removeAll { blocked(it.mWord) }
+            res.mRawSuggestions?.removeAll { blocked(it.mWord) }
             yoFix(res)
             own.firstOrNull()?.let { top -> try {
                 res.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(top.mWord, dictionaryGroups.map { it.locale.language }, res.map { it.mScore }))
@@ -546,7 +548,9 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
             suggestionResults.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(composedData.mTypedWord, dictionaryGroups.map { it.locale.language }, suggestionResults.map { it.mScore }))
         } catch (e: Throwable) { }
 
-        suggestionResults.removeAll { ru.klaviatura.text.Profanity.blocks(it.mWord) }
+        val blocked = { word: String -> ru.klaviatura.text.Profanity.blocks(word) }
+        suggestionResults.removeAll { blocked(it.mWord) }
+        suggestionResults.mRawSuggestions?.removeAll { blocked(it.mWord) }
         yoFix(suggestionResults)
         return suggestionResults
     }
