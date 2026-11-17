@@ -527,9 +527,19 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
 
         includeAtLeastTwoWordSuggestions(suggestionResults, suggestionsArray, composedData.mTypedWord)
         if (composedData.mTypedWord.isEmpty()) {
+            val isRussianPrediction = dictionaryGroups.firstOrNull()?.locale?.language == "ru"
+            val previousWord = ngramContext.getNthPrevWord(1)?.toString()
+            if (isRussianPrediction) {
+                val unwanted = { word: String ->
+                    ru.klaviatura.glide.GlideEngine.shouldSuppressNextWordPrediction(previousWord, word)
+                }
+                suggestionResults.removeAll { unwanted(it.mWord) }
+                suggestionResults.mRawSuggestions?.removeAll { unwanted(it.mWord) }
+            }
             val have = suggestionResults.map { it.mWord.lowercase(Locale.ROOT).replace('ё', 'е') }.toHashSet()
             val extra = ru.klaviatura.glide.GlideEngine.predictions(ngramContext).filter {
-                it.mWord.lowercase(Locale.ROOT).replace('ё', 'е') !in have
+                (!isRussianPrediction || !ru.klaviatura.glide.GlideEngine.shouldSuppressNextWordPrediction(previousWord, it.mWord))
+                    && it.mWord.lowercase(Locale.ROOT).replace('ё', 'е') !in have
             }
             suggestionResults.addAll(extra)
         } else try {
