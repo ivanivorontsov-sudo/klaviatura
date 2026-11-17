@@ -21,7 +21,7 @@ class AppWorkaroundsTest {
         )
         variations.forEach { variation ->
             val inputType = InputType.TYPE_CLASS_TEXT or variation or noSuggestions
-            assertTrue("variation=0x${variation.toString(16)}", AppWorkarounds.shouldShowSuggestions(inputType))
+            assertTrue(AppWorkarounds.shouldShowSuggestions(inputType), "variation=0x${variation.toString(16)}")
         }
     }
 
@@ -34,7 +34,7 @@ class AppWorkaroundsTest {
         )
         passwordVariations.forEach { variation ->
             val inputType = InputType.TYPE_CLASS_TEXT or variation or noSuggestions
-            assertFalse("variation=0x${variation.toString(16)}", AppWorkarounds.shouldShowSuggestions(inputType))
+            assertFalse(AppWorkarounds.shouldShowSuggestions(inputType), "variation=0x${variation.toString(16)}")
         }
         assertFalse(AppWorkarounds.shouldShowSuggestions(
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD or noSuggestions
