@@ -7,28 +7,13 @@ import helium314.keyboard.latin.utils.InputTypeUtils
 
 object AppWorkarounds {
     /**
-     * Some app editors mark ordinary text fields as not needing dictionary candidates.
-     * Allow the keyboard's word strip in a small set of user-reported text editors, but
-     * keep the app's original inputType flags intact so NO_SUGGESTIONS still prevents
-     * automatic correction. Vivaldi is limited to its URI address field; page form fields
-     * keep the browser's own composition policy. Google app text editors are included because
-     * Gemini/Assistant prompts can be hosted by the Google app package rather than the standalone
-     * Gemini package on some entry paths.
+     * Keep dictionary suggestions enabled for ordinary text fields even when an editor sets
+     * TYPE_TEXT_FLAG_NO_SUGGESTIONS. Passwords remain excluded. The original inputType is not
+     * rewritten, so the editor's separate auto-correction and composing policies stay intact.
      */
-    fun mayOverrideNoSuggestionsFlag(inputType: Int, packageName: String?): Boolean {
+    fun shouldShowSuggestions(inputType: Int): Boolean {
         if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
-        if (InputTypeUtils.isAnyPasswordInputType(inputType)) return false
-
-        val variation = inputType and InputType.TYPE_MASK_VARIATION
-        return when (packageName) {
-            "com.vivaldi.browser" ->
-                variation == InputType.TYPE_TEXT_VARIATION_URI
-            "com.google.android.gm", "com.google.android.apps.bard",
-            "com.google.android.googlequicksearchbox" ->
-                variation != InputType.TYPE_TEXT_VARIATION_URI
-                    && !InputTypeUtils.isEmailVariation(variation)
-            else -> false
-        }
+        return !InputTypeUtils.isAnyPasswordInputType(inputType)
     }
 
     fun adjustInputType(inputType: Int, packageName: String?): Int {
