@@ -2,7 +2,6 @@
 package ru.klaviatura.text
 
 import android.content.Context
-import kotlin.concurrent.thread
 
 /**
  * «Блокировать нецензурные и грубые слова» (1.3.1, on by default).
@@ -22,13 +21,20 @@ object Profanity {
         if (ctx != null) return
         ctx = context.applicationContext
         refresh()
-        thread(name = "kl-profanity") {
-            val s = HashSet<String>()
-            for (l in listOf("ru", "en", "pl", "uk", "de")) try {
-                ctx!!.assets.open("glide/blocked_$l.txt").bufferedReader().useLines { ls -> ls.forEach { if (it.isNotBlank()) s.add(it.trim()) } }
-            } catch (e: Throwable) { }
-            words = s
+        // Load the small bundled deny-lists before the IME can render its first candidates.
+        // An asynchronous load briefly allowed offensive words to leak into the suggestion strip.
+        val s = HashSet<String>()
+        for (language in listOf("ru", "en", "pl", "uk", "de")) {
+            try {
+                context.applicationContext.assets.open("glide/blocked_$language.txt")
+                    .bufferedReader().useLines { lines ->
+                        lines.forEach { if (it.isNotBlank()) s.add(it.trim()) }
+                    }
+            } catch (e: Throwable) {
+                // Keep loading other language lists; missing files are not fatal to IME startup.
+            }
         }
+        words = s
     }
 
     fun refresh() {
