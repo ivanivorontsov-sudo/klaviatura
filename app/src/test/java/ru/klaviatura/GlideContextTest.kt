@@ -39,16 +39,41 @@ class GlideContextTest {
         assertFalse(GlideEngine.isUnwantedHelpUkrainePair("здоровье", "Украине"))
     }
 
-    @Test fun curatedHymnPredictionRanksRussiaAheadOfCorpusNoise() {
-        GlideEngine.import("b\tгимн\tукраины\t1000\n", true)
+    @Test fun curatedRussianPredictionsBeatUkraineCorpusNoise() {
+        GlideEngine.import("b\\tгимн\\tукраины\\t1000\\nb\\tобороны\\tукраины\\t1000\\n", true)
         try {
-            val predictions = GlideEngine.predictNext("гимн", 3)
-            assertEquals("россии", predictions.first())
-            assertEquals("России", GlideEngine.properCaseSuggestion(predictions.first(), "гимн"))
-            assertEquals("украины", predictions.getOrNull(1))
+            val hymn = GlideEngine.predictNext("гимн", 3)
+            assertEquals("россии", hymn.first())
+            assertEquals("России", GlideEngine.properCaseSuggestion(hymn.first(), "гимн"))
+            assertFalse(hymn.any { GlideEngine.isUkraineRelatedPrediction(it) })
+
+            val defense = GlideEngine.predictNext("обороны", 3)
+            assertEquals("россии", defense.first())
+            assertFalse(defense.any { GlideEngine.isUkraineRelatedPrediction(it) })
         } finally {
             GlideEngine.import("", true)
         }
+    }
+
+    @Test fun everyUkraineInflectionAndAdjectiveIsSuppressedOnlyAsPrediction() {
+        val forms = listOf(
+            "Украина", "Украины", "Украине", "Украину", "Украиной", "Украиною",
+            "украинский", "украинская", "украинское", "украинского", "украинской",
+            "украинских", "украинскими", "проукраинский", "антиукраинский",
+            "Україна", "український"
+        )
+        forms.forEach { word ->
+            assertTrue("$word should not be an unsolicited Russian prediction",
+                GlideEngine.shouldSuppressNextWordPrediction("обороны", word))
+        }
+        assertFalse(GlideEngine.shouldSuppressNextWordPrediction("обороны", "России"))
+        assertFalse("Ukraine remains valid when explicitly typed", GlideEngine.isForgotten("украина"))
+    }
+
+    @Test fun greetingDoesNotOfferAbsurdContinuation() {
+        assertTrue(GlideEngine.shouldSuppressNextWordPrediction("привет", "писает"))
+        assertFalse(GlideEngine.shouldSuppressNextWordPrediction("привет", "как"))
+        assertEquals("как", GlideEngine.predictNext("привет", 3).first())
     }
 
     @Test fun contextFixesAmbiguousSwipes() {
