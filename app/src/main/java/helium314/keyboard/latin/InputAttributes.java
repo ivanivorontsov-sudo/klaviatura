@@ -92,21 +92,14 @@ public final class InputAttributes {
         final boolean flagAutoCorrect = 0 != (mInputType & InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
         final boolean flagAutoComplete = 0 != (mInputType & InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE);
 
-        // TODO: Have a helper method in InputTypeUtils
-        // Make sure that passwords are not displayed in {@link SuggestionStripView}.
-        // A few app-specific editors use NO_SUGGESTIONS even for normal prose. For those
-        // narrowly identified fields, allow dictionary candidates without clearing the
-        // original flag: auto-correction remains disabled as requested by the editor.
-        final boolean appAllowsDictionarySuggestions = flagNoSuggestions
-                && AppWorkarounds.INSTANCE.mayOverrideNoSuggestionsFlag(
-                        mInputType, mTargetApplicationPackageName);
-        if (appAllowsDictionarySuggestions) {
-            Log.i(TAG, "Showing dictionary candidates despite NO_SUGGESTIONS for "
-                    + mTargetApplicationPackageName);
+        // NO_SUGGESTIONS is advisory for this keyboard: show word candidates in every
+        // non-password text field, but preserve the original inputType so auto-correction
+        // and composing behavior remain independently controlled by the editor.
+        mShouldShowSuggestions = AppWorkarounds.INSTANCE.shouldShowSuggestions(mInputType);
+        mMayOverrideShowingSuggestions = mShouldShowSuggestions;
+        if (flagNoSuggestions && mShouldShowSuggestions) {
+            Log.i(TAG, "Showing dictionary candidates despite NO_SUGGESTIONS");
         }
-        mShouldShowSuggestions = !mIsPasswordField
-                && (!flagNoSuggestions || appAllowsDictionarySuggestions);
-        mMayOverrideShowingSuggestions = !mIsPasswordField;
 
         mShouldInsertSpacesAutomatically = InputTypeUtils.isAutoSpaceFriendlyType(mInputType);
 
