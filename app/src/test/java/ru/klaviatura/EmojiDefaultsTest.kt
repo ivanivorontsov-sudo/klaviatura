@@ -29,7 +29,7 @@ class EmojiDefaultsTest {
 
     @Test fun pinnedDefaultsHaveMainKeys() {
         val pinned = helium314.keyboard.latin.utils.defaultPinnedToolbarPref.split("|").filter { it.endsWith(":true") }.map { it.substringBefore(':') }
-        assertEquals(listOf("CLIPBOARD", "EMOJI", "VOICE"), pinned)
+        assertEquals(listOf("CLIPBOARD", "EMOJI", "VOICE", "CODE"), pinned)
     }
 
     @Test fun pinnedMigration() {

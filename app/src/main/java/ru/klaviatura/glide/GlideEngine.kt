@@ -158,7 +158,26 @@ object GlideEngine : GlideLearning {
         }
     }
 
-    fun suggest(keyboard: Keyboard, data: ComposedData, ngram: NgramContext, locales: List<Locale>): List<SuggestedWordInfo> {
+    // ---- 1.5.9: stale-gesture cancellation and time budget ----
+    private val requestEpoch = java.util.concurrent.atomic.AtomicInteger(0)
+    /** called for every gesture update / end that is queued for decoding; older decodes see they are stale */
+    fun newRequest(): Int = requestEpoch.incrementAndGet()
+    fun isStale(id: Int): Boolean = requestEpoch.get() != id
+    /** time budget of one decode: live updates must stay snappy, the final result may take a bit longer */
+    const val BUDGET_UPDATE_MS = 30L
+    const val BUDGET_TAIL_MS = 50L
+    @Volatile var lastWasStale = false; private set
+    @Volatile var lastTruncated = false; private set
+    @Volatile var lastDecodeMs = 0L; private set
+    @Volatile private var cachedDecoder: GlideDecoder? = null
+
+    @JvmOverloads
+    fun suggest(keyboard: Keyboard, data: ComposedData, ngram: NgramContext, locales: List<Locale>, tail: Boolean = true): List<SuggestedWordInfo> {
+        val t0 = System.nanoTime()
+        val myEpoch = requestEpoch.get()
+        val deadline = t0 + (if (tail) BUDGET_TAIL_MS else BUDGET_UPDATE_MS) * 1_000_000L
+        val abort: (() -> Boolean)? = if (tail) null else ({ requestEpoch.get() != myEpoch })
+        lastWasStale = false; lastTruncated = false
         val keys = keyboard.sortedKeys.mapNotNull { k ->
             val c = k.code
             if (c <= 0 || !Character.isLetter(c)) null
@@ -178,7 +197,8 @@ object GlideEngine : GlideLearning {
             }
         }
         if (lex.isEmpty()) return emptyList()
-        val decoder = GlideDecoder(keys)
+        // the decoder (key tables, letter-code maps) is reused while the layout stays the same
+        val decoder = cachedDecoder?.takeIf { it.keys == keys } ?: GlideDecoder(keys).also { cachedDecoder = it }
         val p = data.mInputPointers
         val prevRaw = ngram.getNthPrevWord(1)?.toString()
         val prev = prevRaw?.lowercase()
@@ -191,10 +211,15 @@ object GlideEngine : GlideLearning {
             xs = xs.copyOfRange(hs, n); ys = ys.copyOfRange(hs, n); n -= hs
             if (hs != lastHoldStart) { lastHoldStart = hs; onRestart?.invoke() }
         } else lastHoldStart = 0
-        var res = decoder.decode(xs, ys, n, lex, this, prev)
+        var res = decoder.decode(xs, ys, n, lex, this, prev, deadlineNs = deadline, abort = abort)
+        if (decoder.lastAborted) { lastWasStale = true; return emptyList() }
+        var truncated = decoder.lastTruncated
         // (b) returned to the start and went again: decode the latest segment, keep it only if clearly better
         for (st in (if (holdMs >= GestureRestart.MIN_HOLD_MS) GestureRestart.returnStarts(xs, ys, n, decoder.kw) else emptyList()).asReversed()) {
-            val seg = decoder.decode(xs.copyOfRange(st, n), ys.copyOfRange(st, n), n - st, lex, this, prev)
+            if (System.nanoTime() > deadline) break
+            val seg = decoder.decode(xs.copyOfRange(st, n), ys.copyOfRange(st, n), n - st, lex, this, prev, deadlineNs = deadline, abort = abort)
+            if (decoder.lastAborted) { lastWasStale = true; return emptyList() }
+            truncated = truncated || decoder.lastTruncated
             if (seg.isNotEmpty() && (res.isEmpty() || seg[0].cost < res[0].cost - GestureRestart.SEGMENT_MARGIN)) {
                 if (st != lastLoopStart) { lastLoopStart = st; onRestart?.invoke() }
                 res = seg; xs = xs.copyOfRange(st, n); ys = ys.copyOfRange(st, n); n -= st; break
@@ -220,6 +245,7 @@ object GlideEngine : GlideLearning {
         }
         val merged = if (extra.isEmpty()) all else (extra + all)
         lastDecoder = decoder; lastCandidates = merged // picking the guess teaches the word (see learn)
+        lastTruncated = truncated; lastDecodeMs = (System.nanoTime() - t0) / 1_000_000L
         return merged.mapIndexed { i, c ->
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION

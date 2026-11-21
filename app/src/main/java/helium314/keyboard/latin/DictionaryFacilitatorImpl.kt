@@ -489,7 +489,11 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
         settingsValuesForSuggestion: SettingsValuesForSuggestion, sessionId: Int, inputStyle: Int
     ): SuggestionResults {
         if (composedData.mIsBatchMode && ru.klaviatura.glide.GlideEngine.shouldHandle()) {
-            val own = ru.klaviatura.glide.GlideEngine.suggest(keyboard, composedData, ngramContext, dictionaryGroups.map { it.locale })
+            val own = ru.klaviatura.glide.GlideEngine.suggest(keyboard, composedData, ngramContext, dictionaryGroups.map { it.locale },
+                inputStyle != SuggestedWords.INPUT_STYLE_UPDATE_BATCH)
+            // nothing found within the time budget (or lexicons not loaded yet): fall back to the stock gesture library if there is one
+            val fallbackToStock = own.isEmpty() && helium314.keyboard.latin.utils.JniUtils.sHaveGestureLib && !ru.klaviatura.glide.GlideEngine.lastWasStale
+            if (!fallbackToStock) {
             val res = SuggestionResults(SuggestedWords.MAX_SUGGESTIONS, ngramContext.isBeginningOfSentenceContext, false)
             res.addAll(own)
             res.mRawSuggestions?.addAll(own)
@@ -501,6 +505,7 @@ class DictionaryFacilitatorImpl : DictionaryFacilitator {
                 res.addAll(ru.klaviatura.emoji.EmojiSuggest.infos(top.mWord, dictionaryGroups.map { it.locale.language }, res.map { it.mScore }))
             } catch (e: Throwable) { } }
             return res
+            }
         }
         val proximityInfoHandle = keyboard.proximityInfo.nativeProximityInfo
         val weightOfLangModelVsSpatialModel = floatArrayOf(Dictionary.NOT_A_WEIGHT_OF_LANG_MODEL_VS_SPATIAL_MODEL)

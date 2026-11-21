@@ -48,6 +48,12 @@ class Lexicon(val lang: String) {
         if (c.code < fast.size) fast[c.code] = v else slow[c] = v
         return v
     }
+    // raw access for the decoder's hot loop (no allocation, no hashing)
+    val codeCount: Int get() = nCodes
+    fun charOfCode(code: Int): Char = b2c[code]
+    fun rawBuf(): ByteArray = buf
+    fun rawOffsets(): IntArray = off
+    fun rawEnd(): Int = bufLen
     fun word(i: Int): String { val o = off[i]; val l = len(i); return String(CharArray(l) { b2c[buf[o + it].toInt() and 0xFF] }) }
     fun charAt(i: Int, k: Int): Char = b2c[buf[off[i] + k].toInt() and 0xFF]
     fun length(i: Int) = len(i)
@@ -275,11 +281,191 @@ class GlideDecoder(val keys: List<GKey>) {
         return sb.toString().takeIf { it.length >= 2 }
     }
 
+    // ---- 1.5.9 speed: letter-code -> key tables per lexicon, built once per decoder (layout), not per gesture ----
+    private val codeMaps = arrayOf(java.util.IdentityHashMap<Lexicon, IntArray>(), java.util.IdentityHashMap<Lexicon, IntArray>())
+    /** table indexed by the lexicon's letter code: key index, -1 = no key, -2 = joiner */
+    private fun codeMap(lex: Lexicon, cross: Boolean): IntArray {
+        val m = codeMaps[if (cross) 1 else 0]
+        val old = m[lex]
+        if (old != null && old.size == lex.codeCount + 1) return old
+        val arr = IntArray(lex.codeCount + 1) { -1 }
+        for (c in 1..lex.codeCount) arr[c] = idx(lex.charOfCode(c), cross)
+        m[lex] = arr
+        return arr
+    }
+    private val dtwA = DoubleArray(N); private val dtwB = DoubleArray(N)
+    private val seqBuf = IntArray(64)
+    /** diagnostics of the last decode: scan stopped at the time budget / was cancelled as stale */
+    @Volatile var lastTruncated = false; private set
+    @Volatile var lastAborted = false; private set
+    @Volatile var lastScanned = 0; private set
+
+    private class Elig(val a: IntArray, val n: Int, val startExtra: Double)
+
+    /** per-gesture (per path variant) data shared by the scan passes */
+    private class Ctx(
+        val px: FloatArray, val py: FloatArray, val pathLen: Float, val near: FloatArray, val dwell: FloatArray,
+        val endDist: FloatArray, val startDist: FloatArray, val nnTight: IntArray, val nnLoose: IntArray, val len: Int,
+        val variantPenalty: Double, val qx: FloatArray, val qy: FloatArray
+    )
+
+    /** mutable state of one decode call */
+    private class State(
+        val max: Int, val deadline: Long, val abort: (() -> Boolean)?, val learning: GlideLearning?, val prev: String?
+    ) {
+        val best = HashMap<String, GlideCandidate>()
+        // running list of the best costs: once it is full, hopeless words are dropped before the expensive scoring
+        val topK = (max + 6).coerceAtLeast(8)
+        val top = DoubleArray(topK) { Double.MAX_VALUE }
+        var stop = false; var truncated = false; var aborted = false
+        var scanned = 0; var scored = 0
+    }
+
+    /** ordered reachability table: nn[k * (len + 1) + j] = first path point >= j that is within [t] key units of key k, or len */
+    private fun reachTable(dx: FloatArray, dy: FloatArray, t: Float): IntArray {
+        val len = dx.size; val w = len + 1
+        val nn = IntArray(keys.size * w)
+        for (k in keys.indices) {
+            val o = k * w
+            nn[o + len] = len
+            for (j in len - 1 downTo 0) nn[o + j] = if (dist(dx[j], dy[j], kux[k], kuy[k]) <= t) j else nn[o + j + 1]
+        }
+        return nn
+    }
+
+    /**
+     * One scan of a lexicon, words in frequency-rank order (rounds of CHUNK words per first letter).
+     * [tight] pass: start / end within [Params.radius], every letter within [Params.nearTight] of the path and in path order.
+     * The loose pass (only when the tight one found nothing convincing) accepts the soft region up to radiusHard / nearMax.
+     */
+    private fun scan(g: Ctx, lex: Lexicon, langPenalty: Double, st: State, tight: Boolean, from: Int, to: Int) {
+        val p = P
+        val lsize = lex.size
+        if (lsize == 0) return
+        // decide whether the lexicon's script is on the keyboard; otherwise map positionally (cross)
+        val cross = idx(lex.firstChar(0), false) < 0 && idx(lex.firstChar(minOf(1, lsize - 1)), false) < 0
+        val keyOf = codeMap(lex, cross)
+        val buf = lex.rawBuf(); val offs = lex.rawOffsets(); val bufEnd = lex.rawEnd()
+        val logf = lex.logf; val maxLog = lex.maxLog
+        val crossPen = if (cross) CROSS_PENALTY else 0.0
+        val gateMax = if (tight) p.radius else p.radiusHard
+        val nearLim = if (tight) p.nearTight else p.nearMax
+        val nn = if (tight) g.nnTight else g.nnLoose
+        val L = g.len; val w1 = L + 1
+        val near = g.near; val dwell = g.dwell; val endDist = g.endDist
+        val seq = seqBuf
+        val top = st.top; val topK = st.topK
+        val learning = st.learning
+        val elig = ArrayList<Elig>()
+        for ((c, fl) in lex.byFirst) {
+            val k0 = idx(c, cross)
+            if (k0 < 0) continue
+            val startD = g.startDist[k0]
+            if (startD > gateMax) continue
+            elig.add(Elig(fl.a, fl.n, if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0))
+        }
+        val pos = IntArray(elig.size)
+        // lists are in frequency-rank order, so a rank window [from, to) is a contiguous part of each list
+        for (ei in elig.indices) {
+            val el = elig[ei]
+            var lo = 0; var hi = el.n
+            while (lo < hi) { val mid = (lo + hi) ushr 1; if (el.a[mid] < from) lo = mid + 1 else hi = mid }
+            pos[ei] = lo
+        }
+        var active = elig.size
+        while (active > 0 && !st.stop) {
+            active = 0
+            for (ei in elig.indices) {
+                val el = elig[ei]; var fi = pos[ei]
+                if (fi >= el.n) continue
+                val end = min(el.n, fi + CHUNK)
+                val arr = el.a
+                while (fi < end) {
+                    val i = arr[fi++]
+                    if (i >= to) { fi = el.n; break }
+                    if (i >= lsize) continue
+                    st.scanned++
+                    val o = offs[i]
+                    val e = if (i + 1 < lsize) offs[i + 1] else bufEnd
+                    val len = e - o
+                    if (len <= 0) continue
+                    // cheap reject on the last letter before anything else
+                    val lastKey = keyOf[buf[e - 1].toInt() and 0xFF]
+                    if (lastKey >= 0 && endDist[lastKey] > gateMax) continue
+                    // key sequence (joiners skipped, repeated letters collapse; dwell can revive a double);
+                    // every letter must be near the path, and the letters must be reached in path order
+                    var m = 0; var ok = true; var miss = 0.0; var doubles = 0; var at = 0
+                    for (k in 0 until len) {
+                        val ki = keyOf[buf[o + k].toInt() and 0xFF]
+                        if (ki == -2) continue
+                        if (ki < 0 || m >= seq.size) { ok = false; break }
+                        if (m > 0 && seq[m - 1] == ki) { if (dwell[ki] > 0.55f) doubles++; continue }
+                        val d = near[ki]
+                        if (d > nearLim) { ok = false; break }
+                        at = nn[ki * w1 + at]
+                        if (at >= L) { ok = false; break }
+                        if (d > p.nearOk) miss += d - p.nearOk
+                        seq[m++] = ki
+                    }
+                    if (!ok || m < 2 && g.pathLen > 1.2f) continue
+                    if (miss > p.missMax) continue
+                    val kl = seq[m - 1]
+                    val endD = endDist[kl]
+                    if (endD > gateMax) continue
+                    val endExtra = if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
+                    val freq = (logf[i] / maxLog).toDouble().coerceIn(0.0, 1.0)
+                    // 1.5.9: long rare words must not win over common ones: penalty grows with rarity and length
+                    val rare = 1.0 - freq
+                    val rarePen = p.rareW * rare * rare * (0.4 + 0.12 * max(0, m - 4))
+                    val base = -p.freqW * freq + langPenalty + g.variantPenalty + crossPen + el.startExtra + endExtra -
+                        doubles * p.dwellBoost + rarePen
+                    val worst = top[topK - 1]
+                    // learning boosts are bounded (BOOST_SLACK), so a word that cannot get into the list is dropped here
+                    if (worst != Double.MAX_VALUE && base + p.missW * miss - BOOST_SLACK >= worst) continue
+                    val limit = if (worst == Double.MAX_VALUE) Double.MAX_VALUE else worst - base + BOOST_SLACK
+                    st.scored++
+                    val geo = score(seq, m, g.px, g.py, g.pathLen, g.qx, g.qy, miss, limit, rare) ?: continue
+                    val word = lex.word(i)
+                    if (learning?.isForgotten(word) == true || ru.klaviatura.text.Profanity.blocks(word)) continue
+                    val total = geo + base - (learning?.wordBoost(word) ?: 0.0) - (learning?.bigramBoost(st.prev, word) ?: 0.0)
+                    val old = st.best[word]
+                    if (old == null || old.cost > total) {
+                        st.best[word] = GlideCandidate(word, lex.lang, total, cross)
+                        if (total < worst) { // keep `top` sorted ascending
+                            var q = topK - 1
+                            while (q > 0 && top[q - 1] > total) { top[q] = top[q - 1]; q-- }
+                            top[q] = total
+                        }
+                    }
+                }
+                pos[ei] = fi
+                if (fi < el.n) active++
+                if (System.nanoTime() > st.deadline) { st.truncated = true; st.stop = true; break }
+                if (st.abort != null && st.abort.invoke()) { st.aborted = true; st.stop = true; break }
+            }
+        }
+    }
+
+    private fun convincing(st: State) = st.best.size >= 3 && st.top[0] <= P.looseTrigger
+
+    @Volatile var lastTailPass = false; private set
+    /** diagnostics: did the last decode need the loose (soft start/end) pass */
+    @Volatile var lastLoosePass = false; private set
+    @Volatile var lastScored = 0; private set
+
+    /**
+     * @param deadlineNs System.nanoTime() after which the scan stops and returns what it has found so far
+     *        (words are scanned in frequency-rank order, so only rare words are lost)
+     * @param abort polled between chunks; true = the gesture is stale, return nothing
+     */
+    @Synchronized
     fun decode(
         rawX: IntArray, rawY: IntArray, n: Int,
         lexicons: List<Pair<Lexicon, Double>>, // lexicon and language penalty (0 = current layout language)
-        learning: GlideLearning? = null, prevWord: String? = null, max: Int = 18
+        learning: GlideLearning? = null, prevWord: String? = null, max: Int = 18,
+        deadlineNs: Long = Long.MAX_VALUE, abort: (() -> Boolean)? = null
     ): List<GlideCandidate> {
+        lastTruncated = false; lastAborted = false; lastScanned = 0; lastLoosePass = false; lastTailPass = false; lastScored = 0
         if (n < 2 || keys.isEmpty()) return emptyList()
         val bx = (learning?.biasX ?: 0f) * kw; val by = (learning?.biasY ?: 0f) * kh
         val fx = FloatArray(n) { rawX[it] - bx }; val fy = FloatArray(n) { rawY[it] - by }
@@ -294,10 +480,10 @@ class GlideDecoder(val keys: List<GKey>) {
             if (c in 1 until xs0.size - 1) variants.add(Triple(xs0.copyOfRange(c, xs0.size), ys0.copyOfRange(c, ys0.size), 0.1))
         }
         lastStart = xs0.first() to ys0.first(); lastEnd = xs0.last() to ys0.last()
-        val best = HashMap<String, GlideCandidate>()
         val p = P
-        val seq = IntArray(64)
+        val st = State(max, deadlineNs, abort, learning, prevWord)
         for ((xs, ys, variantPenalty) in variants) {
+            if (st.stop) break
             // path in key units
             val ux = FloatArray(xs.size) { xs[it] / kw }; val uy = FloatArray(ys.size) { ys[it] / kh }
             val pathLen = length(ux, uy)
@@ -320,52 +506,30 @@ class GlideDecoder(val keys: List<GKey>) {
                 for (k in dwell.indices) dwell[k] = max(0f, dwell[k] - 0.55f)
             }
             val sx = px[0]; val sy = py[0]; val ex = px[N - 1]; val ey = py[N - 1]
-            val qx = FloatArray(N); val qy = FloatArray(N)
-            for ((lex, langPenalty) in lexicons) {
-                if (lex.size == 0) continue
-                // decide whether the lexicon's script is on the keyboard; otherwise map positionally (cross)
-                val cross = idx(lex.firstChar(0), false) < 0 && idx(lex.firstChar(minOf(1, lex.size - 1)), false) < 0
-                for ((c, fl) in lex.byFirst) {
-                    val k0 = idx(c, cross)
-                    if (k0 < 0) continue
-                    val startD = dist(sx, sy, kux[k0], kuy[k0])
-                    if (startD > p.radiusHard) continue
-                    val startExtra = if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0
-                    for (fi in 0 until fl.n) { val i = fl.a[fi]
-                        val len = lex.length(i)
-                        // key sequence (joiners skipped, repeated letters collapse; dwell can revive a double)
-                        var m = 0; var ok = true; var miss = 0.0; var doubles = 0
-                        for (k in 0 until len) {
-                            val ki = idx(lex.charAt(i, k), cross)
-                            if (ki == -2) continue
-                            if (ki < 0 || m >= seq.size) { ok = false; break }
-                            if (m > 0 && seq[m - 1] == ki) { if (dwell[ki] > 0.55f) doubles++; continue }
-                            val d = near[ki]
-                            if (d > p.nearMax) { ok = false; break }
-                            if (d > p.nearOk) miss += d - p.nearOk
-                            seq[m++] = ki
-                        }
-                        if (!ok || m < 2 && pathLen > 1.2f) continue
-                        if (miss > p.missMax) continue
-                        val kl = seq[m - 1]
-                        val endD = dist(ex, ey, kux[kl], kuy[kl])
-                        if (endD > p.radiusHard) continue
-                        val endExtra = if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
-                        val freq = lex.logf[i] / lex.maxLog
-                        // cheap bound: even a perfect shape can't beat the current worst of a full list
-                        val geo = score(seq, m, px, py, pathLen, qx, qy, miss) ?: continue
-                        val w = lex.word(i)
-                        if (learning?.isForgotten(w) == true || ru.klaviatura.text.Profanity.blocks(w)) continue
-                        val total = geo - p.freqW * freq - (learning?.wordBoost(w) ?: 0.0) -
-                            (learning?.bigramBoost(prevWord, w) ?: 0.0) + langPenalty + variantPenalty +
-                            (if (cross) CROSS_PENALTY else 0.0) + startExtra + endExtra - doubles * p.dwellBoost
-                        val old = best[w]
-                        if (old == null || old.cost > total) best[w] = GlideCandidate(w, lex.lang, total, cross)
-                    }
-                }
+            val g = Ctx(
+                px, py, pathLen, near, dwell,
+                FloatArray(keys.size) { dist(ex, ey, kux[it], kuy[it]) }, FloatArray(keys.size) { dist(sx, sy, kux[it], kuy[it]) },
+                reachTable(dx, dy, p.nearTight), reachTable(dx, dy, p.nearMax), dx.size,
+                variantPenalty, FloatArray(N), FloatArray(N)
+            )
+            // stage 1: tight gate, frequent words only (the file is in frequency-rank order, so rank = index)
+            val head = p.headWords
+            for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, true, 0, head) }
+            // stage 2: the rare tail, only when stage 1 found nothing convincing
+            if (!st.stop && !convincing(st)) {
+                lastTailPass = true
+                for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, true, head, Int.MAX_VALUE) }
+            }
+            // stage 3: loose gate (soft start / end), only when still nothing convincing
+            if (!st.stop && !convincing(st)) {
+                lastLoosePass = true
+                for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, false, 0, Int.MAX_VALUE) }
             }
         }
-        val out = ArrayList(best.values)
+        lastScanned = st.scanned; lastScored = st.scored
+        lastTruncated = st.truncated; lastAborted = st.aborted
+        if (st.aborted) return emptyList()
+        val out = ArrayList(st.best.values)
         out.sortBy { it.cost }
         val seen = HashSet<String>()
         return out.filter { seen.add(it.word) }.take(max)
@@ -376,22 +540,31 @@ class GlideDecoder(val keys: List<GKey>) {
      * shape (uniformly resampled point distance), ordered key alignment (each key in order must be hit by some part of
      * the path, DTW-like), deviation of the path from the word's polyline, start / end distance, missed keys, length.
      */
-    private fun score(seq: IntArray, m: Int, px: FloatArray, py: FloatArray, pathLen: Float, qx: FloatArray, qy: FloatArray, miss: Double): Double? {
+    private fun score(seq: IntArray, m: Int, px: FloatArray, py: FloatArray, pathLen: Float, qx: FloatArray, qy: FloatArray, miss: Double,
+                      limit: Double = Double.MAX_VALUE, rare: Double = 0.0): Double? {
         val p = P
         var tLen = 0f
         for (j in 1 until m) tLen += dist(kux[seq[j - 1]], kuy[seq[j - 1]], kux[seq[j]], kuy[seq[j]])
         if (pathLen < tLen * 0.38f - 1f) return null
         if (pathLen > tLen * 2.7f + 2.5f) return null
+        // the template starts / ends exactly on the first / last key: these cheap terms are checked before anything else
+        val start = dist(px[0], py[0], kux[seq[0]], kuy[seq[0]]).toDouble()
+        val end = dist(px[N - 1], py[N - 1], kux[seq[m - 1]], kuy[seq[m - 1]]).toDouble()
+        val lenPen = abs(ln(((pathLen + 1f) / (tLen + 1f)).toDouble()))
+        val lenTerm = p.lenW * lenPen * (1.0 + p.rareLenW * rare)
+        // every remaining term is >= 0: stop early when this already cannot make the list
+        var partial = p.startW * start + p.endW * end + p.missW * miss + lenTerm
+        if (partial > limit) return null
         // template resampled to N points
         templateInto(seq, m, tLen, qx, qy)
         var loc = 0.0
         for (i in 0 until N) loc += dist(px[i], py[i], qx[i], qy[i])
         loc /= N
         if (loc > p.locMax) return null
-        val start = dist(px[0], py[0], qx[0], qy[0]).toDouble()
-        val end = dist(px[N - 1], py[N - 1], qx[N - 1], qy[N - 1]).toDouble()
+        partial += p.locW * loc
+        if (partial > limit) return null
         // ordered alignment: key j is matched to path point a_j, a non-decreasing, a_1 near the start, a_m near the end
-        var prev = DoubleArray(N); var cur = DoubleArray(N)
+        var prev = dtwA; var cur = dtwB
         for (i in 0 until N) { val d = dist(px[i], py[i], kux[seq[0]], kuy[seq[0]]); prev[i] = d * d + i * p.skipW }
         for (j in 1 until m) {
             val kx = kux[seq[j]]; val ky = kuy[seq[j]]
@@ -406,6 +579,8 @@ class GlideDecoder(val keys: List<GKey>) {
         var align = Double.MAX_VALUE
         for (i in 0 until N) align = min(align, prev[i] + (N - 1 - i) * p.skipW)
         align /= m
+        partial += p.alignW * align
+        if (partial > limit) return null
         // path points far from the word's polyline (e.g. an extra excursion to another key)
         var dev = 0.0
         for (i in 0 until N) {
@@ -415,7 +590,8 @@ class GlideDecoder(val keys: List<GKey>) {
             if (b > p.devOk) dev += (b - p.devOk) * (b - p.devOk)
         }
         dev /= N
-        val lenPen = abs(ln(((pathLen + 1f) / (tLen + 1f)).toDouble()))
+        partial += p.devW * dev
+        if (partial > limit) return null
         // shape channel (translation-invariant): compare centroid-centered paths
         var pcx = 0f; var pcy = 0f; var qcx = 0f; var qcy = 0f
         for (i in 0 until N) { pcx += px[i]; pcy += py[i]; qcx += qx[i]; qcy += qy[i] }
@@ -424,7 +600,7 @@ class GlideDecoder(val keys: List<GKey>) {
         var shape = 0.0
         for (i in 0 until N) shape += dist(px[i] - pcx, py[i] - pcy, qx[i] - qcx, qy[i] - qcy)
         shape /= N
-        return p.locW * loc + p.alignW * align + p.devW * dev + p.startW * start + p.endW * end + p.missW * miss + p.lenW * lenPen + p.shapeW * shape
+        return partial + p.shapeW * shape
     }
 
     private fun templateInto(seq: IntArray, m: Int, tLen: Float, ox: FloatArray, oy: FloatArray) {
@@ -449,6 +625,12 @@ class GlideDecoder(val keys: List<GKey>) {
         @JvmField var radiusHard = 2.35f
         @JvmField var nearOk = 1.0f
         @JvmField var nearMax = 2.05f
+        /** tight pass: letters must pass within this distance of the path (key units) */
+        @JvmField var nearTight = 1.45f
+        /** stage 1 scans only the most frequent words (by rank); the rare tail only when nothing convincing was found */
+        @JvmField var headWords = 150_000
+        /** the loose pass runs only when the best tight cost is worse than this */
+        @JvmField var looseTrigger = 2.2
         @JvmField var missMax = 1.8
         @JvmField var locMax = 1.85
         @JvmField var skipW = 0.02
@@ -466,10 +648,17 @@ class GlideDecoder(val keys: List<GKey>) {
         @JvmField var startSoftW = 0.85
         @JvmField var endSoftW = 1.05
         @JvmField var dwellBoost = 0.55
+        /** 1.5.9: penalty for rare (and long) words, and extra weight of the path-length mismatch for them */
+        @JvmField var rareW = 1.0
+        @JvmField var rareLenW = 1.5
     }
 
     companion object {
         const val N = 40
+        /** words scanned per first-letter list before the time budget is checked */
+        const val CHUNK = 1024
+        /** upper bound of learned boosts (word / bigram / LM) used for exact pruning */
+        const val BOOST_SLACK = 4.0
         @JvmField var P = Params()
         /** weight of base context LM: modest, geometry dominates */
         const val CTX_W = 0.6

@@ -99,8 +99,12 @@ class InputLogicHandler implements Handler.Callback {
             }
             generation = mBatchInputGeneration;
             mInputLogic.mWordComposer.setBatchInputPointers(batchPointers);
+            // 1.5.9: every queued update makes the older ones stale; a stale live update is dropped without decoding
+            // (and a decode that is already running notices it and stops), so the queue can never pile up and freeze
+            final int requestId = ru.klaviatura.glide.GlideEngine.INSTANCE.newRequest();
             getSuggestedWords(() -> {
                 if (!isCurrentBatchInput(generation)) return;
+                if (!isTailBatchInput && ru.klaviatura.glide.GlideEngine.INSTANCE.isStale(requestId)) return;
                 mInputLogic.getSuggestedWords(
                     isTailBatchInput ? SuggestedWords.INPUT_STYLE_TAIL_BATCH : SuggestedWords.INPUT_STYLE_UPDATE_BATCH,
                     sequenceNumber,
