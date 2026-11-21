@@ -39,7 +39,7 @@ object GlideEngine : GlideLearning {
         ru.klaviatura.text.Profanity.init(context)
         ru.klaviatura.text.Yo.init(context)
         thread(name = "kl-glide-load") {
-            for (lang in listOf("ru", "en")) { try { loadLexicon(lang); loadLm(lang) } catch (e: Throwable) { } }
+            for (lang in listOf("ru", "en", ru.klaviatura.code.CodeMode.LEX_LANG)) { try { loadLexicon(lang); if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang) } catch (e: Throwable) { } }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
             load()
         }
@@ -168,7 +168,15 @@ object GlideEngine : GlideLearning {
         val main = keyboard.mId.locale.language
         lastMainLang = main
         val langs = (listOf(main) + locales.map { it.language }).distinct()
-        val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }
+        val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }.toMutableList()
+        val codeMode = ru.klaviatura.code.CodeMode.isCodeLayout(keyboard)
+        ru.klaviatura.code.CodeMode.active = codeMode
+        if (codeMode) {
+            lexiconIfReady(ru.klaviatura.code.CodeMode.LEX_LANG)?.let { codeLex ->
+                lex.removeAll { it.first.lang == ru.klaviatura.code.CodeMode.LEX_LANG }
+                lex.add(0, codeLex to 0.0)
+            }
+        }
         if (lex.isEmpty()) return emptyList()
         val decoder = GlideDecoder(keys)
         val p = data.mInputPointers
@@ -195,8 +203,24 @@ object GlideEngine : GlideLearning {
         val guess = decoder.rawGuess(xs, ys, n)
         val all = if (guess != null && !isForgotten(guess) && res.none { it.word == guess })
             res.toMutableList().apply { add(minOf(3, size), GlideCandidate(guess, main, (res.getOrNull(minOf(3, size) - 1)?.cost ?: 0.0) + 0.01, false)) } else res
-        lastDecoder = decoder; lastCandidates = all // picking the guess teaches the word (see learn)
-        return all.mapIndexed { i, c ->
+        val extra = ArrayList<GlideCandidate>()
+        if (codeMode) {
+            val codeLex = lexicons[ru.klaviatura.code.CodeMode.LEX_LANG]
+            val topWord = all.firstOrNull()?.word
+            if (topWord != null) {
+                for (s in ru.klaviatura.code.CodeSwipe.splitCompound(topWord, codeLex)) {
+                    if (all.none { it.word == s } && extra.none { it.word == s })
+                        extra.add(GlideCandidate(s, ru.klaviatura.code.CodeMode.LEX_LANG, (all.getOrNull(0)?.cost ?: 0.0) + 0.02, false))
+                }
+            }
+            for (s in ru.klaviatura.code.CodeSwipe.joinWithPrevious(prev, topWord ?: guess ?: "")) {
+                if (all.none { it.word == s } && extra.none { it.word == s })
+                    extra.add(GlideCandidate(s, ru.klaviatura.code.CodeMode.LEX_LANG, (all.getOrNull(0)?.cost ?: 0.0) - 0.05, false))
+            }
+        }
+        val merged = if (extra.isEmpty()) all else (extra + all)
+        lastDecoder = decoder; lastCandidates = merged // picking the guess teaches the word (see learn)
+        return merged.mapIndexed { i, c ->
             val score = (1_000_000 - c.cost * 50_000).toInt().coerceAtLeast(1)
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION

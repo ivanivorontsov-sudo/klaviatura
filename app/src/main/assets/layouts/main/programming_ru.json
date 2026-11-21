@@ -1,0 +1,62 @@
+[
+  [
+    { "label": "tab", "type": "function", "width": 0.09 },
+    { "label": "{", "popup": { "main": { "label": "}" } } },
+    { "label": "}" },
+    { "label": "[", "popup": { "main": { "label": "{" } } },
+    { "label": "]", "popup": { "main": { "label": "}" } } },
+    { "label": "(", "popup": { "main": { "label": ")" } } },
+    { "label": ")" },
+    { "label": "<", "popup": { "relevant": [ { "label": "<=" }, { "label": "«" } ] } },
+    { "label": ">", "popup": { "relevant": [ { "label": ">=" }, { "label": "»" }, { "label": "->" } ] } },
+    { "label": "/", "popup": { "relevant": [ { "label": "//" }, { "label": "\\" } ] } },
+    { "label": "|", "popup": { "relevant": [ { "label": "||" }, { "label": "&" } ] } },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "+" },
+      "default": { "label": "=", "popup": { "relevant": [ { "label": "==" }, { "label": "!=" }, { "label": "+" } ] } }
+    }
+  ],
+  [
+    { "label": "й" },
+    { "label": "ц" },
+    { "label": "у" },
+    { "label": "к" },
+    { "label": "е", "popup": { "main": { "label": "ё" } } },
+    { "label": "н" },
+    { "label": "г" },
+    { "label": "ш" },
+    { "label": "щ" },
+    { "label": "з" },
+    { "label": "х", "popup": { "relevant": [ { "label": "ъ" }, { "label": "#" } ] } }
+  ],
+  [
+    { "label": "ф" },
+    { "label": "ы" },
+    { "label": "в" },
+    { "label": "а" },
+    { "label": "п" },
+    { "label": "р" },
+    { "label": "о" },
+    { "label": "л" },
+    { "label": "д" },
+    { "label": "ж" },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": ":" },
+      "default": { "label": "э", "popup": { "relevant": [ { "label": ";" }, { "label": ":" }, { "label": "]" } ] } }
+    }
+  ],
+  [
+    { "label": "_", "popup": { "main": { "label": "-" } } },
+    { "label": "я" },
+    { "label": "ч" },
+    { "label": "с" },
+    { "label": "м" },
+    { "label": "и" },
+    { "label": "т" },
+    { "label": "ь", "popup": { "main": { "label": "ъ" } } },
+    { "label": "б", "popup": { "main": { "label": "<" } } },
+    { "label": "ю", "popup": { "main": { "label": ">" } } },
+    { "label": "left", "type": "function", "width": 0.07, "popup": { "main": { "label": "up" } } },
+    { "label": "right", "type": "function", "width": 0.07, "popup": { "main": { "label": "down" } } }
+  ]
+]

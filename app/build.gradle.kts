@@ -1,4 +1,5 @@
 import com.android.build.api.variant.ApplicationVariant
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -7,7 +8,21 @@ plugins {
 }
 
 android {
-    compileSdk = 37
+    compileSdk = run {
+        val lp = rootProject.file("local.properties")
+        val sdkDir = (
+            if (lp.exists()) lp.readLines()
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("sdk.dir=") }
+                ?.substringAfter("=")
+                ?.trim()
+            else null
+        ) ?: System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: ""
+        listOf(37, 36, 35).firstOrNull { api ->
+            File(sdkDir, "platforms/android-$api").isDirectory
+        } ?: 35
+    }
+
 
     defaultConfig {
         // optional GIF search key (KLIPY), from a CI secret / env; never committed
@@ -15,8 +30,8 @@ android {
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 29
-        versionName = "1.5.7"
+        versionCode = 30
+        versionName = "1.5.8"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))

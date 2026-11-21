@@ -7,6 +7,12 @@
     <string name="kl_learn_summary">Всё хранится только на телефоне</string>
     <string name="kl_voice_builtin">Встроенный офлайн-голос (Vosk)</string>
     <string name="kl_voice_builtin_summary">Язык = текущая раскладка. Выключите, чтобы использовать системный голосовой ввод</string>
+    <string name="kl_voice_engine">Голосовой ввод</string>
+    <string name="kl_voice_engine_summary">По умолчанию — встроенный офлайн-голос. Можно выбрать системный голосовой ввод Google</string>
+    <string name="kl_voice_engine_builtin">Встроенный офлайн-голос</string>
+    <string name="kl_voice_engine_google">Голосовой ввод Google</string>
+    <string name="kl_voice_google_missing">Голосовой ввод Google не установлен. Установите приложение Google или вернитесь к встроенному голосу в настройках</string>
+    <string name="kl_voice_google_need_mic">Нужно разрешение на микрофон для голосового ввода Google</string>
     <string name="kl_voice_mixed">Смешанный голос (ru+en)</string>
     <string name="kl_voice_mixed_summary">Распознавать оба языка одновременно, фраза за фразой</string>
     <string name="kl_voice_commands">Голосовая пунктуация</string>

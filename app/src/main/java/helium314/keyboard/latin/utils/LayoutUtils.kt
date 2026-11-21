@@ -18,10 +18,18 @@ object LayoutUtils {
         if (locale == null)
             return SubtypeSettings.getAllAvailableSubtypes()
                 .mapTo(HashSet()) { it.mainLayoutNameOrQwerty().substringBefore("+") }
-                .apply { addAll(context.resources.getStringArray(R.array.predefined_layouts)) }
+                .apply {
+                    addAll(context.resources.getStringArray(R.array.predefined_layouts))
+                    add(ru.klaviatura.code.CodeMode.LAYOUT_LATIN)
+                    add(ru.klaviatura.code.CodeMode.LAYOUT_RU)
+                }
         val layouts = SubtypeSettings.getResourceSubtypesForLocale(locale).mapNotNullTo(mutableSetOf()) { it.mainLayoutName() }
         if (locale.script() == ScriptUtils.SCRIPT_LATIN)
             layouts.addAll(context.resources.getStringArray(R.array.predefined_layouts))
+        // Programming layouts: Latin Code for every language, Cyrillic Code for Cyrillic locales.
+        layouts.add(ru.klaviatura.code.CodeMode.LAYOUT_LATIN)
+        if (locale.script() == ScriptUtils.SCRIPT_CYRILLIC)
+            layouts.add(ru.klaviatura.code.CodeMode.LAYOUT_RU)
         return layouts
     }
 

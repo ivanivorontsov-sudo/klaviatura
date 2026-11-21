@@ -21,6 +21,7 @@ import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.SettingsActivity
 import helium314.keyboard.settings.preferences.SliderPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
+import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.latin.utils.previewDark
@@ -36,18 +37,21 @@ fun GestureTypingScreen(
         Log.v("irrelevant", "stupid way to trigger recomposition on preference change")
     val gestureFloatingPreviewEnabled = prefs.getBoolean(Settings.PREF_GESTURE_FLOATING_PREVIEW_TEXT, Defaults.PREF_GESTURE_FLOATING_PREVIEW_TEXT)
     val gestureEnabled = prefs.getBoolean(Settings.PREF_GESTURE_INPUT, Defaults.PREF_GESTURE_INPUT)
+    val voiceEngine = prefs.getString(ru.klaviatura.voice.VoiceInput.PREF_VOICE_ENGINE, null)?.takeIf { it.isNotEmpty() }
+        ?: if (prefs.getBoolean(ru.klaviatura.voice.VoiceInput.PREF_ENGINE, true)) ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN
+        else ru.klaviatura.voice.VoiceInput.ENGINE_GOOGLE
     val items = listOf(
         Settings.PREF_GESTURE_INPUT,
         if (gestureEnabled) ru.klaviatura.glide.GlideEngine.PREF_OWN_GLIDE else null,
         if (gestureEnabled) ru.klaviatura.glide.GlideEngine.PREF_HOLD_MS else null,
         if (gestureEnabled) "kl_learn_export" else null,
         if (gestureEnabled) "kl_learn_import" else null,
-        ru.klaviatura.voice.VoiceInput.PREF_ENGINE,
-        ru.klaviatura.voice.VoiceInput.PREF_MIXED,
-        "kl_voice_import",
-        ru.klaviatura.voice.VoiceInput.PREF_COMMANDS,
-        ru.klaviatura.voice.VoiceInput.PREF_SILENCE_S,
-        ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK,
+        ru.klaviatura.voice.VoiceInput.PREF_VOICE_ENGINE,
+        if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_MIXED else null,
+        if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) "kl_voice_import" else null,
+        if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_COMMANDS else null,
+        if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_SILENCE_S else null,
+        if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_ENGINE_VOSK else null,
         if (gestureEnabled)
             Settings.PREF_GESTURE_PREVIEW_TRAIL else null,
         if (gestureEnabled)
@@ -85,8 +89,14 @@ fun createGestureTypingSettings(context: Context) = listOf(
             ctx.startActivity(android.content.Intent(ctx, ru.klaviatura.glide.LearnTransferActivity::class.java).putExtra("export", false))
         })
     },
-    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_ENGINE, R.string.kl_voice_builtin, R.string.kl_voice_builtin_summary) {
-        SwitchPreference(it, true) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_VOICE_ENGINE, R.string.kl_voice_engine, R.string.kl_voice_engine_summary) {
+        val items = listOf(
+            stringResource(R.string.kl_voice_engine_builtin) to ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN,
+            stringResource(R.string.kl_voice_engine_google) to ru.klaviatura.voice.VoiceInput.ENGINE_GOOGLE,
+        )
+        ListPreference(it, items, ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) {
+            KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        }
     },
     Setting(context, ru.klaviatura.voice.VoiceInput.PREF_MIXED, R.string.kl_voice_mixed, R.string.kl_voice_mixed_summary) {
         SwitchPreference(it, false)

@@ -31,6 +31,15 @@
         android:isAsciiCapable="true"
         />
     <subtype android:icon="@drawable/ic_ime_switcher"
+        android:label="@string/subtype_generic_programming"
+        android:subtypeId="0xc0de0001"
+        android:imeSubtypeLocale="en_US"
+        android:languageTag="en-US"
+        android:imeSubtypeMode="keyboard"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:programming,TrySuppressingImeSwitcher,AsciiCapable,SupportTouchPositionCorrection,EmojiCapable"
+        android:isAsciiCapable="true"
+        />
+    <subtype android:icon="@drawable/ic_ime_switcher"
         android:label="@string/subtype_generic"
         android:subtypeId="0xc9194f97"
         android:imeSubtypeLocale="en_AU"
@@ -978,6 +987,15 @@
         android:languageTag="ru"
         android:imeSubtypeMode="keyboard"
         android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:russian_student,SupportTouchPositionCorrection,EmojiCapable"
+        android:isAsciiCapable="false"
+    />
+    <subtype android:icon="@drawable/ic_ime_switcher"
+        android:label="@string/subtype_generic_programming"
+        android:subtypeId="0xc0de0002"
+        android:imeSubtypeLocale="ru"
+        android:languageTag="ru"
+        android:imeSubtypeMode="keyboard"
+        android:imeSubtypeExtraValue="KeyboardLayoutSet=MAIN:programming_ru,SupportTouchPositionCorrection,EmojiCapable"
         android:isAsciiCapable="false"
     />
     <!-- TODO: This Sinhala keyboard is a preliminary layout.

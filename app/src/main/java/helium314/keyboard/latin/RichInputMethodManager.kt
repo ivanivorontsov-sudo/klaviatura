@@ -54,7 +54,7 @@ class RichInputMethodManager private constructor() {
 
     private var shortcuts = listOf<Shortcut>()
 
-    val isShortcutImeReady get() = shortcuts.isNotEmpty() || ru.klaviatura.voice.VoiceInput.builtinEnabled()
+    val isShortcutImeReady get() = shortcuts.isNotEmpty() || ru.klaviatura.voice.VoiceInput.builtinEnabled() || ru.klaviatura.voice.VoiceInput.googleEnabled()
 
     fun getEnabledInputMethodSubtypes(imi: InputMethodInfo, allowsImplicitlySelectedSubtypes: Boolean) =
         inputMethodInfoCache.getEnabledInputMethodSubtypeList(imi, allowsImplicitlySelectedSubtypes)

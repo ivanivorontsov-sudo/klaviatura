@@ -27,7 +27,10 @@ import kotlin.concurrent.thread
  * at the end of each phrase, so the cursor and existing text are never lost.
  */
 object VoiceInput {
-    const val PREF_ENGINE = "kl_voice_builtin"   // true = built-in, false = system voice IME
+    const val PREF_ENGINE = "kl_voice_builtin"   // legacy boolean: true = built-in, false = system/Google
+    const val PREF_VOICE_ENGINE = "kl_voice_engine" // "builtin" | "google"
+    const val ENGINE_BUILTIN = "builtin"
+    const val ENGINE_GOOGLE = "google"
     const val PREF_MIXED = "kl_voice_mixed"
     const val PREF_COMMANDS = "kl_voice_commands"
     /** 1.4.0: how long recording continues without speech (seconds); [SILENCE_NEVER] = until the mic is tapped */
@@ -37,7 +40,7 @@ object VoiceInput {
     /** pause that ends a phrase (it is committed, recording goes on) */
     const val PHRASE_PAUSE_S = 2.4f
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main by lazy { Handler(Looper.getMainLooper()) }
     private var ctx: Context? = null
     @Volatile var listening = false; private set
     /** True until AudioRecord has started and audio is actually being captured. */
@@ -55,7 +58,16 @@ object VoiceInput {
 
     fun init(context: Context) { ctx = context.applicationContext }
 
-    fun builtinEnabled(): Boolean = ctx?.prefs()?.getBoolean(PREF_ENGINE, true) ?: true
+    /** Current voice engine; default is the built-in offline engine. Migrates the old boolean pref. */
+    fun engine(): String {
+        val p = ctx?.prefs() ?: return ENGINE_BUILTIN
+        return resolveEngine(p.getString(PREF_VOICE_ENGINE, null), p.getBoolean(PREF_ENGINE, true))
+    }
+    /** Pref resolution: new string pref wins, otherwise migrate the old boolean (default = built-in). */
+    fun resolveEngine(newPref: String?, oldBuiltin: Boolean = true): String =
+        newPref?.takeIf { it.isNotEmpty() } ?: if (oldBuiltin) ENGINE_BUILTIN else ENGINE_GOOGLE
+    fun builtinEnabled(): Boolean = engine() == ENGINE_BUILTIN
+    fun googleEnabled(): Boolean = engine() == ENGINE_GOOGLE
     private fun mixed() = ctx?.prefs()?.getBoolean(PREF_MIXED, false) ?: false
 
     /** language of the active layout; voice always follows it */
@@ -68,6 +80,7 @@ object VoiceInput {
     /** short label for the mic key */
     fun label(): String {
         progress[engineKey(currentLang())]?.let { return if (it < 0) "распак." else "$it%" }
+        if (googleEnabled()) return "G"
         val l = currentLang().uppercase()
         return if (mixed()) "$l+${secondLang(currentLang()).uppercase()}" else l
     }
@@ -266,7 +279,7 @@ object VoiceInput {
             // the recognizer gets the REAL rate of the recorder (Vosk resamples if it differs from 16 kHz)
             val rate = rec.sampleRate.toFloat()
             val commands = ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false
-            session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands)
+            session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands, ru.klaviatura.code.CodeMode.active)
             rec.startRecording()
             // Do not claim to be listening while the recorder and recognizer are still starting.
             starting = false

@@ -305,6 +305,7 @@
     <string name="close_history" tools:keep="@string/close_history">Закрыть историю буфера обмена</string>
     <string name="clipboard_toolbar_keys">Выбрать клавиши панели буфера обмена</string>
     <string name="subtype_generic_extended">%s (Расширенная)</string>
+    <string name="subtype_generic_programming">%s (Код)</string>
     <string name="auto_hide_toolbar_summary">Скрывать панель инструментов при появлении подсказок</string>
     <string name="settings_screen_toolbar">Панель инструментов</string>
     <string name="auto_show_toolbar_summary">Показывать панель инструментов при начале ввода или выделении текста</string>

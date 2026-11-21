@@ -305,6 +305,20 @@ class GlideDecoder(val keys: List<GKey>) {
             val (dx, dy) = resample(ux, uy, N * 3)
             // how close the path comes to every key (for the "each letter must be passed" check)
             val near = FloatArray(keys.size) { k -> var b = Float.MAX_VALUE; for (i in dx.indices) b = min(b, dist(dx[i], dy[i], kux[k], kuy[k])); b }
+            // dwell/hook: extra path length spent near a key (double letters, e.g. «анна», off, success)
+            val dwell = FloatArray(keys.size)
+            if (dx.size >= 2) {
+                for (i in 1 until dx.size) {
+                    val step = dist(dx[i - 1], dy[i - 1], dx[i], dy[i])
+                    if (step <= 0f) continue
+                    for (k in keys.indices) {
+                        val d0 = dist(dx[i - 1], dy[i - 1], kux[k], kuy[k])
+                        val d1 = dist(dx[i], dy[i], kux[k], kuy[k])
+                        if (min(d0, d1) < 0.45f) dwell[k] += step
+                    }
+                }
+                for (k in dwell.indices) dwell[k] = max(0f, dwell[k] - 0.55f)
+            }
             val sx = px[0]; val sy = py[0]; val ex = px[N - 1]; val ey = py[N - 1]
             val qx = FloatArray(N); val qy = FloatArray(N)
             for ((lex, langPenalty) in lexicons) {
@@ -314,16 +328,18 @@ class GlideDecoder(val keys: List<GKey>) {
                 for ((c, fl) in lex.byFirst) {
                     val k0 = idx(c, cross)
                     if (k0 < 0) continue
-                    if (dist(sx, sy, kux[k0], kuy[k0]) > p.radius) continue
+                    val startD = dist(sx, sy, kux[k0], kuy[k0])
+                    if (startD > p.radiusHard) continue
+                    val startExtra = if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0
                     for (fi in 0 until fl.n) { val i = fl.a[fi]
                         val len = lex.length(i)
-                        // key sequence (joiners skipped, repeated letters collapse)
-                        var m = 0; var ok = true; var miss = 0.0
+                        // key sequence (joiners skipped, repeated letters collapse; dwell can revive a double)
+                        var m = 0; var ok = true; var miss = 0.0; var doubles = 0
                         for (k in 0 until len) {
                             val ki = idx(lex.charAt(i, k), cross)
                             if (ki == -2) continue
                             if (ki < 0 || m >= seq.size) { ok = false; break }
-                            if (m > 0 && seq[m - 1] == ki) continue
+                            if (m > 0 && seq[m - 1] == ki) { if (dwell[ki] > 0.55f) doubles++; continue }
                             val d = near[ki]
                             if (d > p.nearMax) { ok = false; break }
                             if (d > p.nearOk) miss += d - p.nearOk
@@ -332,14 +348,17 @@ class GlideDecoder(val keys: List<GKey>) {
                         if (!ok || m < 2 && pathLen > 1.2f) continue
                         if (miss > p.missMax) continue
                         val kl = seq[m - 1]
-                        if (dist(ex, ey, kux[kl], kuy[kl]) > p.radius) continue
+                        val endD = dist(ex, ey, kux[kl], kuy[kl])
+                        if (endD > p.radiusHard) continue
+                        val endExtra = if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
                         val freq = lex.logf[i] / lex.maxLog
                         // cheap bound: even a perfect shape can't beat the current worst of a full list
                         val geo = score(seq, m, px, py, pathLen, qx, qy, miss) ?: continue
                         val w = lex.word(i)
                         if (learning?.isForgotten(w) == true || ru.klaviatura.text.Profanity.blocks(w)) continue
                         val total = geo - p.freqW * freq - (learning?.wordBoost(w) ?: 0.0) -
-                            (learning?.bigramBoost(prevWord, w) ?: 0.0) + langPenalty + variantPenalty + (if (cross) CROSS_PENALTY else 0.0)
+                            (learning?.bigramBoost(prevWord, w) ?: 0.0) + langPenalty + variantPenalty +
+                            (if (cross) CROSS_PENALTY else 0.0) + startExtra + endExtra - doubles * p.dwellBoost
                         val old = best[w]
                         if (old == null || old.cost > total) best[w] = GlideCandidate(w, lex.lang, total, cross)
                     }
@@ -361,8 +380,8 @@ class GlideDecoder(val keys: List<GKey>) {
         val p = P
         var tLen = 0f
         for (j in 1 until m) tLen += dist(kux[seq[j - 1]], kuy[seq[j - 1]], kux[seq[j]], kuy[seq[j]])
-        if (pathLen < tLen * 0.45f - 1f) return null
-        if (pathLen > tLen * 2.2f + 2.5f) return null
+        if (pathLen < tLen * 0.38f - 1f) return null
+        if (pathLen > tLen * 2.7f + 2.5f) return null
         // template resampled to N points
         templateInto(seq, m, tLen, qx, qy)
         var loc = 0.0
@@ -397,7 +416,15 @@ class GlideDecoder(val keys: List<GKey>) {
         }
         dev /= N
         val lenPen = abs(ln(((pathLen + 1f) / (tLen + 1f)).toDouble()))
-        return p.locW * loc + p.alignW * align + p.devW * dev + p.startW * start + p.endW * end + p.missW * miss + p.lenW * lenPen
+        // shape channel (translation-invariant): compare centroid-centered paths
+        var pcx = 0f; var pcy = 0f; var qcx = 0f; var qcy = 0f
+        for (i in 0 until N) { pcx += px[i]; pcy += py[i]; qcx += qx[i]; qcy += qy[i] }
+        val inv = 1f / N
+        pcx *= inv; pcy *= inv; qcx *= inv; qcy *= inv
+        var shape = 0.0
+        for (i in 0 until N) shape += dist(px[i] - pcx, py[i] - pcy, qx[i] - qcx, qy[i] - qcy)
+        shape /= N
+        return p.locW * loc + p.alignW * align + p.devW * dev + p.startW * start + p.endW * end + p.missW * miss + p.lenW * lenPen + p.shapeW * shape
     }
 
     private fun templateInto(seq: IntArray, m: Int, tLen: Float, ox: FloatArray, oy: FloatArray) {
@@ -416,21 +443,29 @@ class GlideDecoder(val keys: List<GKey>) {
 
     /** tunable weights (tuned on the synthetic benchmark, see GlideBenchTest / tools) */
     class Params {
-        @JvmField var radius = 1.25f
+        /** tight start/end gate (key widths); words slightly outside still compete with a penalty */
+        @JvmField var radius = 1.65f
+        /** hard start/end cutoff — diagonal neighbours plus finger jitter */
+        @JvmField var radiusHard = 2.35f
         @JvmField var nearOk = 1.0f
-        @JvmField var nearMax = 1.56f
-        @JvmField var missMax = 1.2
-        @JvmField var locMax = 1.6
+        @JvmField var nearMax = 2.05f
+        @JvmField var missMax = 1.8
+        @JvmField var locMax = 1.85
         @JvmField var skipW = 0.02
         @JvmField var devOk = 0.15f
-        @JvmField var locW = 2.05
+        @JvmField var locW = 1.85
         @JvmField var alignW = 0.58
-        @JvmField var devW = 4.0
+        @JvmField var devW = 3.6
         @JvmField var startW = 0.8
-        @JvmField var endW = 1.6
-        @JvmField var missW = 1.2
-        @JvmField var lenW = 0.3
-        @JvmField var freqW = 2.8
+        @JvmField var endW = 1.85
+        @JvmField var missW = 1.1
+        @JvmField var lenW = 0.35
+        @JvmField var freqW = 2.5
+        /** SHARK2 shape channel: path and template compared after subtracting centroids */
+        @JvmField var shapeW = 1.2
+        @JvmField var startSoftW = 0.85
+        @JvmField var endSoftW = 1.05
+        @JvmField var dwellBoost = 0.55
     }
 
     companion object {

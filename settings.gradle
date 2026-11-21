@@ -1,2 +1,11 @@
+pluginManagement {
+    repositories {
+        // Box may redirect dl.google.com; include Maven Central and the plugin portal for Kotlin plugins.
+        maven { url = uri("https://dl-ssl.google.com/dl/android/maven2/") }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 include ':app'
 include ':tools:make-emoji-keys'

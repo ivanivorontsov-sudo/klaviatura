@@ -1,0 +1,77 @@
+[
+  [
+    { "label": "tab", "type": "function", "width": 0.09 },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "{" },
+      "default": { "label": "{", "popup": { "relevant": [ { "label": "}" }, { "label": "[" }, { "label": "]" } ] } }
+    },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "}" },
+      "default": { "label": "}" }
+    },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "[" },
+      "default": { "label": "[", "popup": { "main": { "label": "{" } } }
+    },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "]" },
+      "default": { "label": "]", "popup": { "main": { "label": "}" } } }
+    },
+    { "label": "(", "popup": { "relevant": [ { "label": ")" }, { "label": "<" } ] } },
+    { "label": ")", "popup": { "relevant": [ { "label": ">" } ] } },
+    { "label": "<", "popup": { "relevant": [ { "label": "<=" }, { "label": "<<" } ] } },
+    { "label": ">", "popup": { "relevant": [ { "label": ">=" }, { "label": ">>" }, { "label": "->" }, { "label": "=>" } ] } },
+    { "label": "/", "popup": { "relevant": [ { "label": "//" }, { "label": "/*" }, { "label": "*/" }, { "label": "\\?" } ] } },
+    { "label": "\\", "popup": { "main": { "label": "|" } } },
+    { "label": "|", "popup": { "relevant": [ { "label": "||" }, { "label": "&" }, { "label": "&&" } ] } }
+  ],
+  [
+    { "label": "q", "popup": { "main": { "label": "\\#" } } },
+    { "label": "w", "popup": { "main": { "label": "~" } } },
+    { "label": "e", "popup": { "main": { "label": "`" } } },
+    { "label": "r", "popup": { "main": { "label": "^" } } },
+    { "label": "t", "popup": { "main": { "label": "*" } } },
+    { "label": "y", "popup": { "main": { "label": "&" } } },
+    { "label": "u", "popup": { "main": { "label": "%" } } },
+    { "label": "i", "popup": { "main": { "label": "\\@" } } },
+    { "label": "o", "popup": { "main": { "label": "\\$" } } },
+    { "label": "p", "popup": { "main": { "label": "!" } } },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "+" },
+      "default": { "label": "=", "popup": { "relevant": [ { "label": "==" }, { "label": "===" }, { "label": "!=" }, { "label": "+" } ] } }
+    }
+  ],
+  [
+    { "label": "a", "popup": { "main": { "label": "@" } } },
+    { "label": "s", "popup": { "main": { "label": "#" } } },
+    { "label": "d", "popup": { "main": { "label": "$$$" } } },
+    { "label": "f", "popup": { "main": { "label": "_" } } },
+    { "label": "g", "popup": { "main": { "label": "&" } } },
+    { "label": "h", "popup": { "main": { "label": "-" } } },
+    { "label": "j", "popup": { "main": { "label": "+" } } },
+    { "label": "k", "popup": { "main": { "label": "*" } } },
+    { "label": "l", "popup": { "main": { "label": ":" } } },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": ":" },
+      "default": { "label": ";", "popup": { "main": { "label": ":" } } }
+    },
+    { "$": "shift_state_selector",
+      "manualOrLocked": { "label": "\"" },
+      "default": { "label": "'", "popup": { "relevant": [ { "label": "\"" }, { "label": "`" } ] } }
+    }
+  ],
+  [
+    { "label": "_", "popup": { "relevant": [ { "label": "-" }, { "label": "->" } ] } },
+    { "label": "z" },
+    { "label": "x" },
+    { "label": "c" },
+    { "label": "v" },
+    { "label": "b" },
+    { "label": "n" },
+    { "label": "m" },
+    { "label": "left", "type": "function", "width": 0.07, "popup": { "main": { "label": "up" } } },
+    { "label": "up", "type": "function", "width": 0.07 },
+    { "label": "down", "type": "function", "width": 0.07 },
+    { "label": "right", "type": "function", "width": 0.07, "popup": { "main": { "label": "down" } } }
+  ]
+]

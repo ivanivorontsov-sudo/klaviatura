@@ -57,6 +57,7 @@ object SubtypeLocaleUtils {
             val layoutName = predefinedLayouts[i]
             keyboardLayoutToDisplayName[layoutName] = layoutDisplayNames[i]
         }
+        keyboardLayoutToDisplayName["programming_ru"] = "Код"
 
         val exceptionalLocaleInRootLocale = resources.getStringArray(R.array.subtype_locale_displayed_in_root_locale)
         val exceptionalLocaleInRootLocaleDisplayNames = resources.getStringArray(R.array.subtype_locale_displayed_in_root_locale_display_names)

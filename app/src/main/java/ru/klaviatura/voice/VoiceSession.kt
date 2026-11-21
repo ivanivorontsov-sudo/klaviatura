@@ -27,6 +27,7 @@ class VoiceSession(
     private var asrs: List<Pair<String, Asr>>,
     private val out: VoiceOutput,
     private val commands: Boolean = true,
+    private val codeMode: Boolean = false,
 ) {
     var lastPartial = ""; private set
     var lastSpeechAt = System.currentTimeMillis(); private set
@@ -72,7 +73,8 @@ class VoiceSession(
         val words = best
         if (words == null) { if (lastPartial.isNotEmpty()) { lastPartial = ""; out.partial("") }; return false }
         lastSpeechAt = System.currentTimeMillis()
-        val text = VoiceText.format(words.joinToString(" "), bestLang.substringBefore('-'), commands)
+        var text = VoiceText.format(words.joinToString(" "), bestLang.substringBefore('-'), commands)
+        if (codeMode) text = ru.klaviatura.code.CodeVoice.rewrite(text, bestLang.substringBefore('-'))
         lastPartial = ""
         if (text.isNotEmpty()) out.commit(text) else out.partial("")
         return true

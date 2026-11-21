@@ -1171,6 +1171,7 @@ public class LatinIME extends InputMethodService implements
                 mInputLogic.getPrivateCommandPerformer(),
                 mRichImm.getCurrentSubtypeLocale(),
                 switcher.getKeyboard());
+        ru.klaviatura.code.CodeMode.INSTANCE.updateFrom(switcher.getKeyboard());
 
         // Forward this event to the accessibility utilities, if enabled.
         final AccessibilityUtils accessUtils = AccessibilityUtils.Companion.getInstance();
@@ -1727,6 +1728,18 @@ public class LatinIME extends InputMethodService implements
                     mVoiceSettling = true;
                 }
                 ru.klaviatura.voice.VoiceInput.INSTANCE.toggle(mVoiceTarget);
+                return;
+            }
+            if (ru.klaviatura.voice.VoiceInput.INSTANCE.googleEnabled()) {
+                ru.klaviatura.code.CodeMode.INSTANCE.updateFrom(mKeyboardSwitcher.getKeyboard());
+                if (ru.klaviatura.voice.GoogleVoice.INSTANCE.switchTo(this)) return;
+                final String lang = ru.klaviatura.voice.VoiceInput.INSTANCE.currentLang();
+                if (!ru.klaviatura.voice.VoiceInput.INSTANCE.getListening()) {
+                    mInputLogic.finishInput();
+                    mVoiceSettling = true;
+                }
+                if (ru.klaviatura.voice.GoogleVoice.INSTANCE.startRecognizer(this, mVoiceTarget, lang)) return;
+                ru.klaviatura.voice.GoogleVoice.INSTANCE.toastMissing(this);
                 return;
             }
             mRichImm.switchToShortcutIme(this);
