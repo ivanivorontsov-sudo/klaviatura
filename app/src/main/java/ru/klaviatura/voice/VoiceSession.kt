@@ -138,7 +138,7 @@ object VoiceText {
     fun repairVoiceInputTerms(words: List<String>): List<String> {
         val voiceModifiers = setOf("голосовой", "голосовая", "голосовое", "голосового", "голосовой", "голосовым", "голосовом")
         return words.mapIndexed { index, word ->
-            val previous = words.getOrNull(index - 1)?.lowercase()?.trimEnd(',', ':', ';')
+            val previous = words.getOrNull(index - 1)?.lowercase()?.trimEnd(',', ':', ';') ?: ""
             if (previous in voiceModifiers && word.lowercase().trimEnd(',', '.', '!', '?', ':', ';') in setOf("вот", "вод")) {
                 word.replace(Regex("(?i)^(вот|вод)"), "ввод")
             } else word
