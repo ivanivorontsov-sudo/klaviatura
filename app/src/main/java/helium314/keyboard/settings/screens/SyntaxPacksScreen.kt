@@ -103,7 +103,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                             scope.launch {
                                 busy = pack.id
                                 try {
-                                    if (pack.id in installed) {
+                                    if (pack.id in installed && pack.type == "syntax") {
                                         withContext(Dispatchers.IO) { SyntaxPackManager.remove(context, pack) }
                                         if (activeSyntax == pack.id) {
                                             SyntaxPackManager.setActiveSyntax(context, null)
@@ -112,6 +112,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                                         installed = installed - pack.id
                                         status = "Пакет «${pack.name}» удалён"
                                     } else {
+                                        val updating = pack.id in installed
                                         withContext(Dispatchers.IO) { SyntaxPackManager.install(context, pack) }
                                         installed = installed + pack.id
                                         if (pack.type == "lexicon") {
@@ -120,7 +121,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                                             SyntaxPackManager.setActiveSyntax(context, pack.id)
                                             activeSyntax = pack.id
                                         }
-                                        status = "Пакет «${pack.name}» установлен"
+                                        status = if (updating) "Словарь «${pack.name}» обновлён" else "Пакет «${pack.name}» установлен"
                                     }
                                 } catch (e: Exception) {
                                     status = "Ошибка пакета «${pack.name}»: ${e.message ?: "неизвестная ошибка"}"
@@ -135,6 +136,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                         Text(when {
                             busy == pack.id -> "Подождите…"
                             pack.id in installed && pack.type == "syntax" -> "Удалить · выбран"
+                            pack.id in installed && pack.type == "lexicon" -> "Обновить"
                             pack.id in installed -> "Удалить"
                             else -> "Скачать"
                         })
