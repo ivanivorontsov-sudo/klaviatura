@@ -1317,4 +1317,8 @@ New dictionary:
     <string name="gesture_data_swipe_o_scope">Tool for visualizing gesture data: &lt;a href=%s&gt;Swipe-O-Scope&lt;/a&gt;</string>
 
     <!-- new strings should go above the section for gesture data gathering -->
+    <string name="kl_voice_code_mode">Распознавать голос как код</string>
+    <string name="kl_voice_code_mode_summary">Преобразовывать продиктованные ключевые слова и названия конструкций в синтаксис программирования</string>
+    <string name="kl_syntax_packs">Словари и синтаксисы</string>
+    <string name="kl_syntax_packs_summary">Скачивание обновлений словарей свайпа и голосовых пакетов языков программирования</string>
 </resources>
