@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
+import ru.klaviatura.glide.Lexicon
 
 /**
  * Offline-first language-pack store. The catalogue and packs are fetched only on explicit user
@@ -61,6 +62,7 @@ object SyntaxPackManager {
             if (type !in setOf("syntax", "lexicon")) continue
             val validPath = path.startsWith("language-packs/") || (type == "lexicon" && path.matches(Regex("app/src/main/assets/glide/[a-z]{2,3}\\.tsv")))
             if (!validPath || path.contains("..")) continue
+            if (type == "syntax" && !path.matches(Regex("language-packs/syntax/[a-z0-9_-]+\\.json"))) continue
             out.add(Pack(id, o.optString("name", id), o.optString("language"), type, path,
                 o.optString("description"), o.optString("sha256")))
         }
@@ -73,6 +75,7 @@ object SyntaxPackManager {
     fun install(context: Context, pack: Pack) {
         val validPath = pack.path.startsWith("language-packs/") || (pack.type == "lexicon" && pack.path.matches(Regex("app/src/main/assets/glide/[a-z]{2,3}\\.tsv")))
         require(validPath && !pack.path.contains("..")) { "Некорректный путь пакета" }
+        if (pack.type == "syntax") require(pack.path.matches(Regex("language-packs/syntax/[a-z0-9_-]+\\.json"))) { "Некорректный путь синтаксиса" }
         val bytes = readUrl(BASE + pack.path, MAX_PACK)
         if (pack.sha256.isNotBlank()) {
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -176,7 +179,7 @@ object SyntaxPackManager {
             if (code in 300..399) {
                 val location = connection.getHeaderField("Location") ?: throw IOException("Редирект без адреса")
                 val next = URL(URL(current), location)
-                if (next.protocol != "https") throw IOException("Разрешены только HTTPS-загрузки")
+                if (next.protocol != "https" || !(next.host == "github.com" || next.host.endsWith(".githubusercontent.com"))) throw IOException("Загрузка разрешена только с GitHub по HTTPS")
                 current = next.toString()
                 connection.disconnect()
                 return@repeat
