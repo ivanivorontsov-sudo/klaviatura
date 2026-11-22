@@ -50,7 +50,8 @@ object SyntaxPackManager {
             val path = o.optString("path")
             if (!id.matches(Regex("[a-z0-9_-]{2,48}"))) continue
             if (type !in setOf("syntax", "lexicon")) continue
-            if (!path.startsWith("language-packs/") || path.contains("..")) continue
+            val validPath = path.startsWith("language-packs/") || (type == "lexicon" && path.matches(Regex("app/src/main/assets/glide/[a-z]{2,3}\\.tsv")))
+            if (!validPath || path.contains("..")) continue
             out.add(Pack(id, o.optString("name", id), o.optString("language"), type, path,
                 o.optString("description"), o.optString("sha256")))
         }
@@ -61,7 +62,8 @@ object SyntaxPackManager {
         ?.mapNotNull { it.name.substringBeforeLast('.') }?.toSet().orEmpty()
 
     fun install(context: Context, pack: Pack) {
-        require(pack.path.startsWith("language-packs/") && !pack.path.contains("..")) { "Некорректный путь пакета" }
+        val validPath = pack.path.startsWith("language-packs/") || (pack.type == "lexicon" && pack.path.matches(Regex("app/src/main/assets/glide/[a-z]{2,3}\\.tsv")))
+        require(validPath && !pack.path.contains("..")) { "Некорректный путь пакета" }
         val bytes = readUrl(BASE + pack.path, MAX_PACK)
         if (pack.sha256.isNotBlank()) {
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
