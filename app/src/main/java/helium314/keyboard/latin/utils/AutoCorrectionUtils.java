@@ -21,6 +21,11 @@ public final class AutoCorrectionUtils {
     public static boolean suggestionExceedsThreshold(final SuggestedWordInfo suggestion,
             final String consideredWord, final float threshold) {
         if (null != suggestion) {
+            // «ИИ» is a valid Russian initialism. Never let a frequency-based suggestion
+            // silently turn the typed abbreviation into «им» (or another ordinary word).
+            if ("ии".equalsIgnoreCase(consideredWord)) {
+                return false;
+            }
             // Shortlist a whitelisted word
             if (suggestion.isKindOf(SuggestedWordInfo.KIND_WHITELIST)) {
                 return true;
