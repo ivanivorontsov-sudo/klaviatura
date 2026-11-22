@@ -80,7 +80,7 @@ object GlideEngine : GlideLearning {
         сверить сверь сверка сверку сверке сверкой сверил сверила сверили сверяю сверяешь сверяет сверяем сверяйте
         рост росте роста росту ростом росты ростов
         перейти перейди перейдите перейдём перейду перейдёт перейдут перейдя переход перехода переходе переходу
-        поищи поищите поиск поиски поиском поисков поисковый поисковая""".split(Regex("\\s+")).toSet()
+        поищи поищите поиск поиски поиском поисков поисковый поисковая ии""".split(Regex("\\s+")).toSet()
 
     /** Keep unsolicited Russian next-word predictions free of Ukraine-related corpus noise. */
     internal fun isUkraineRelatedPrediction(word: String): Boolean {
@@ -159,6 +159,7 @@ object GlideEngine : GlideLearning {
         // stable even during the short interval before that list is ready.
         return when (word.lowercase(Locale.ROOT).replace('ё', 'е')) {
             "россии" -> "России"
+            "ии" -> "ИИ"
             else -> word
         }
     }
