@@ -76,6 +76,18 @@ class GlideContextTest {
         assertEquals("как", GlideEngine.predictNext("привет", 3).first())
     }
 
+    @Test fun personalTrigramsUseTwoPreviousWordsAndPersist() {
+        GlideEngine.import("t\\tкак\\tдела\\tхорошо\\t100\\nt\\tкак\\tдела\\tплохо\\t2\\n", true)
+        try {
+            assertEquals("хорошо", GlideEngine.predictNext("дела", 3, "как").first())
+            assertEquals("плохо", GlideEngine.predictNext("дела", 3, "если").firstOrNull())
+            val exported = GlideEngine.export()
+            assertTrue(exported.contains("t\\tкак\\tдела\\tхорошо\\t100"))
+        } finally {
+            GlideEngine.import("", true)
+        }
+    }
+
     @Test fun contextFixesAmbiguousSwipes() {
         val lm = lm(); val ru = lex("ru"); val d = GlideDecoder(jcuken); val ctx = Ctx(lm)
         // natural phrases; second word is swiped, first is context
