@@ -160,7 +160,8 @@ object GoogleVoice {
                 val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val raw = texts?.firstOrNull().orEmpty()
                 main.post {
-                    val text = ru.klaviatura.code.CodeVoice.maybeRewrite(raw, locale)
+                    val normalized = VoiceText.format(raw, locale.substringBefore('-'), commands = true)
+                    val text = ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, locale)
                     if (text.isNotBlank()) target.commitPhrase(text)
                     target.endVoice()
                     stopRecognizer()
@@ -170,7 +171,8 @@ object GoogleVoice {
                 val texts = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val raw = texts?.firstOrNull().orEmpty()
                 if (raw.isNotBlank()) main.post {
-                    target.showPartial(ru.klaviatura.code.CodeVoice.maybeRewrite(raw, locale))
+                    val normalized = VoiceText.format(raw, locale.substringBefore('-'), commands = false)
+                    target.showPartial(ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, locale))
                 }
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
