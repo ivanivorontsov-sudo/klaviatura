@@ -21,6 +21,7 @@ import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.SettingsActivity
 import helium314.keyboard.settings.preferences.SliderPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
+import helium314.keyboard.settings.preferences.Preference
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.initPreview
@@ -47,6 +48,8 @@ fun GestureTypingScreen(
         if (gestureEnabled) "kl_learn_export" else null,
         if (gestureEnabled) "kl_learn_import" else null,
         ru.klaviatura.voice.VoiceInput.PREF_VOICE_ENGINE,
+        ru.klaviatura.voice.VoiceInput.PREF_VOICE_CODE_MODE,
+        "kl_syntax_packs",
         if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_MIXED else null,
         if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) "kl_voice_import" else null,
         if (voiceEngine == ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) ru.klaviatura.voice.VoiceInput.PREF_COMMANDS else null,
@@ -97,6 +100,15 @@ fun createGestureTypingSettings(context: Context) = listOf(
         ListPreference(it, items, ru.klaviatura.voice.VoiceInput.ENGINE_BUILTIN) {
             KeyboardSwitcher.getInstance().setThemeNeedsReload()
         }
+    },
+    Setting(context, ru.klaviatura.voice.VoiceInput.PREF_VOICE_CODE_MODE, R.string.kl_voice_code_mode, R.string.kl_voice_code_mode_summary) {
+        SwitchPreference(it, false)
+    },
+    Setting(context, "kl_syntax_packs", R.string.kl_syntax_packs, R.string.kl_syntax_packs_summary) { setting ->
+        val ctx = LocalContext.current
+        Preference(name = setting.title, description = setting.description, onClick = {
+            helium314.keyboard.settings.SettingsDestination.navigateTo(helium314.keyboard.settings.SettingsDestination.SyntaxPacks)
+        })
     },
     Setting(context, ru.klaviatura.voice.VoiceInput.PREF_MIXED, R.string.kl_voice_mixed, R.string.kl_voice_mixed_summary) {
         SwitchPreference(it, false)
