@@ -174,6 +174,12 @@ object CodeVoice {
                 for (k in ph.words.indices) if (norm(tokens[at + k]) != ph.words[k]) { ok = false; break }
                 if (ok) return ph
             }
+            for ((spoken, output) in SyntaxPackManager.spokenPhrases().entries.sortedByDescending { it.key.split(Regex("\\s+")).size }) {
+                val phraseWords = spoken.split(Regex("\\s+"))
+                if (at + phraseWords.size > tokens.size) continue
+                if (phraseWords.indices.all { norm(tokens[at + it]) == phraseWords[it] })
+                    return Phrase(phraseWords, output)
+            }
             return null
         }
         // special: "at sign" is 2 words and is in PHRASES; camel case handled first
@@ -211,6 +217,7 @@ object CodeVoice {
     fun toIdentToken(raw: String): String {
         val n = norm(raw)
         GLOSSARY[n]?.let { return it }
+        SyntaxPackManager.spokenKeywords()[n]?.let { return it }
         // drop punctuation around a word
         val w = raw.filter { it.isLetterOrDigit() || it == '_' }
         if (w.isEmpty()) return ""
