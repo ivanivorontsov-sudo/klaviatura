@@ -57,6 +57,20 @@ class VoiceSessionTest {
         assertEquals("чай и и кофе", VoiceText.format("чай и и кофе", "ru", false))
     }
 
+    @Test fun aiInitialismKeepsUppercaseAndDoesNotMergeNormalConjunctions() {
+        assertEquals("ИИ работает", VoiceText.format("ии работает", "ru", false))
+        assertEquals("как ИИ работает", VoiceText.format("как и и работает", "ru", false))
+        assertEquals("чай и и кофе", VoiceText.format("чай и и кофе", "ru", false))
+        assertEquals("ИИ, работает", VoiceText.format("ии, работает", "ru", false))
+    }
+
+    @Test fun voiceInputWordIsRepairedOnlyInVoiceContext() {
+        assertEquals("голосовой ввод работает", VoiceText.format("голосовой вот работает", "ru", false))
+        assertEquals("голосовой ввод работает", VoiceText.format("голосовой вод работает", "ru", false))
+        assertEquals("вот это работает", VoiceText.format("вот это работает", "ru", false))
+        assertEquals("воды много", VoiceText.format("воды много", "ru", false))
+    }
+
     @Test fun repeatsCollapsed() {
         assertEquals("один ты", VoiceText.format("один ты ты ты ты", "ru", false))
         assertEquals("да да", VoiceText.format("да да", "ru", false))
