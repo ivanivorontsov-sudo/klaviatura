@@ -35,6 +35,7 @@ object GlideEngine : GlideLearning {
     fun init(context: Context) {
         if (appContext != null) return
         appContext = context.applicationContext
+        ru.klaviatura.code.SyntaxPackManager.init(context)
         ru.klaviatura.emoji.EmojiSuggest.init(context)
         ru.klaviatura.text.Profanity.init(context)
         ru.klaviatura.text.Yo.init(context)
@@ -118,6 +119,7 @@ object GlideEngine : GlideLearning {
             val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
             // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
             if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
+            ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
             lexicons[lang] = lex
             lex
         } catch (e: Throwable) { null }
@@ -257,6 +259,22 @@ object GlideEngine : GlideLearning {
             var kind = SuggestedWordInfo.KIND_CORRECTION
             if (i == 0) kind = kind or SuggestedWordInfo.KIND_FLAG_APPROPRIATE_FOR_AUTO_CORRECTION
             SuggestedWordInfo(ru.klaviatura.text.Yo.fix(properCaseSuggestion(c.word, prevRaw)), "", score, kind, Dictionary.DICTIONARY_USER_TYPED, SuggestedWordInfo.NOT_AN_INDEX, SuggestedWordInfo.NOT_A_CONFIDENCE)
+        }
+    }
+
+    /** Reload dictionaries after a downloaded pack is installed or removed. */
+    fun reloadLexicons() {
+        lexicons.clear()
+        loading.clear()
+        lms.clear()
+        val languages = listOf("ru", "en", "pl", "uk", "de", "fr", "es", "it", "pt", "nl", "sv", "tr", "bg", "ro", "hu", "el", ru.klaviatura.code.CodeMode.LEX_LANG)
+        thread(name = "kl-glide-reload") {
+            languages.forEach { lang ->
+                runCatching {
+                    loadLexicon(lang)
+                    if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang)
+                }
+            }
         }
     }
 
