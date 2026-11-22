@@ -25,6 +25,7 @@ object GlideEngine : GlideLearning {
     private val loading = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val unigrams = ConcurrentHashMap<String, Int>()
     private val bigrams = ConcurrentHashMap<String, Int>()
+    private val trigrams = ConcurrentHashMap<String, Int>()
     private val forgotten = ConcurrentHashMap.newKeySet<String>()
     @Volatile override var biasX = 0f; private set
     @Volatile override var biasY = 0f; private set
@@ -104,14 +105,18 @@ object GlideEngine : GlideLearning {
     }
 
     /** next-word predictions: curated common phrases, then user bigrams, then the base LM */
-    fun predictNext(prev: String, n: Int = 3): List<String> {
+    fun predictNext(prev: String, n: Int = 3, previousPrevious: String? = null): List<String> {
         val p = prev.lowercase(Locale.ROOT).replace('ё', 'е')
+        val p2 = previousPrevious?.lowercase(Locale.ROOT)?.replace('ё', 'е')
         val curated = CURATED_NEXT_WORDS[p].orEmpty()
-        val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
+        val tri = if (p2 == null) emptyList() else trigrams.entries
+            .filter { it.key.startsWith("$p2\\t$p\\t") }
+            .sortedByDescending { it.value }
+            .map { it.key.substringAfterLast('\\t') }
+        val user = bigrams.entries.filter { it.key.startsWith("$p\\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\\t') }
         val base = lms.values.flatMap { it.next(p, n) }
-        return (curated + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
+        return (curated + tri + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
-
     private fun loadLexicon(lang: String): Lexicon? {
         lexicons[lang]?.let { return it }
         val ctx = appContext ?: return null
@@ -142,7 +147,8 @@ object GlideEngine : GlideLearning {
         val prev = ngram.getNthPrevWord(1)?.toString() ?: return emptyList()
         val normalizedPrev = prev.lowercase(Locale.ROOT).replace('ё', 'е')
         val curated = CURATED_NEXT_WORDS[normalizedPrev].orEmpty().toSet()
-        return predictNext(prev, 3).mapIndexed { i, w ->
+        val prev2 = ngram.getNthPrevWord(2)?.toString()
+        return predictNext(prev, 3, prev2).mapIndexed { i, w ->
             val score = if (w in curated) Int.MAX_VALUE - i else 100 - i
             SuggestedWordInfo(
                 ru.klaviatura.text.Yo.fix(properCaseSuggestion(w, prev)),
@@ -350,7 +356,7 @@ object GlideEngine : GlideLearning {
     }
 
     fun import(text: String, replace: Boolean) {
-        if (replace) { unigrams.clear(); bigrams.clear(); forgotten.clear() }
+        if (replace) { unigrams.clear(); bigrams.clear(); trigrams.clear(); forgotten.clear() }
         text.lineSequence().forEach { line ->
             val p = line.split('\t')
             when (p.firstOrNull()) {
