@@ -99,6 +99,7 @@ object VoiceText {
         // ASR often spells the spoken abbreviation «ИИ» as two separate conjunctions.
         // Merge only the unambiguous phrase «как и и»; ordinary «и и» remains untouched.
         words = mergeContextualInitialisms(words)
+        words = repairVoiceInputTerms(words)
         words = words.map { ru.klaviatura.text.Yo.fix(ru.klaviatura.text.Profanity.mask(it)) }
         if (commands) words = punctuate(words, lang)
         words = capitalize(words)
@@ -109,7 +110,7 @@ object VoiceText {
      * Voice partials are cumulative. Once a user edits the text, that spoken prefix is already
      * committed and must not be inserted again when the recognizer sends the full phrase next time.
      */
-    /** Repairs only a high-confidence Russian ASR abbreviation pattern, not normal conjunctions. */
+    /** Repairs high-confidence Russian AI initialism patterns without merging ordinary conjunctions. */
     fun mergeContextualInitialisms(words: List<String>): List<String> {
         val out = ArrayList<String>()
         var i = 0
@@ -120,11 +121,28 @@ object VoiceText {
                 out.add("ИИ")
                 i += 3
             } else {
-                out.add(words[i])
+                // A standalone ASR token «ии» is overwhelmingly the abbreviation, not a word.
+                val token = words[i]
+                val match = Regex("(?i)^ии([,.!?;:]?)$").matchEntire(token)
+                out.add(if (match != null) "ИИ" + match.groupValues[1] else token)
                 i++
             }
         }
         return out
+    }
+
+    /**
+     * Zipformer/Google may hear «ввод» as «вот» or «вод».
+     * Repair it only after an explicit voice-related modifier; ordinary «вот» stays intact.
+     */
+    fun repairVoiceInputTerms(words: List<String>): List<String> {
+        val voiceModifiers = setOf("голосовой", "голосовая", "голосовое", "голосового", "голосовой", "голосовым", "голосовом")
+        return words.mapIndexed { index, word ->
+            val previous = words.getOrNull(index - 1)?.lowercase()?.trimEnd(',', ':', ';')
+            if (previous in voiceModifiers && word.lowercase().trimEnd(',', '.', '!', '?', ':', ';') in setOf("вот", "вод")) {
+                word.replace(Regex("(?i)^(вот|вод)"), "ввод")
+            } else word
+        }
     }
 
     fun afterCommittedPrefix(raw: String, committedPrefix: String): String {
