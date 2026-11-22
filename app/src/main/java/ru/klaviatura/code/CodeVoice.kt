@@ -133,7 +133,7 @@ object CodeVoice {
 
     private enum class Style { NONE, CAMEL, PASCAL, SNAKE }
 
-    fun maybeRewrite(raw: String, lang: String, code: Boolean = CodeMode.active): String =
+    fun maybeRewrite(raw: String, lang: String, code: Boolean = CodeMode.active || ru.klaviatura.voice.VoiceInput.voiceCodeModeEnabled()): String =
         if (code) rewrite(raw, lang) else raw
 
     fun rewrite(raw: String, lang: String = "ru"): String {
