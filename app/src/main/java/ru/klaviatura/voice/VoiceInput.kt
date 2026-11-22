@@ -70,6 +70,7 @@ object VoiceInput {
     /** Pref resolution: new string pref wins, otherwise migrate the old boolean (default = built-in). */
     fun resolveEngine(newPref: String?, oldBuiltin: Boolean = true): String =
         newPref?.takeIf { it.isNotEmpty() } ?: if (oldBuiltin) ENGINE_BUILTIN else ENGINE_GOOGLE
+    fun voiceCodeModeEnabled(): Boolean = ctx?.prefs()?.getBoolean(PREF_VOICE_CODE_MODE, false) == true
     fun builtinEnabled(): Boolean = engine() == ENGINE_BUILTIN
     fun googleEnabled(): Boolean = engine() == ENGINE_GOOGLE
     private fun mixed() = ctx?.prefs()?.getBoolean(PREF_MIXED, false) ?: false
