@@ -34,6 +34,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var packs by remember { mutableStateOf<List<SyntaxPackManager.Pack>>(emptyList()) }
     var installed by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var activeSyntax by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Загружаю каталог…") }
 
@@ -44,6 +45,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                 val result = withContext(Dispatchers.IO) { SyntaxPackManager.catalog() }
                 packs = result
                 installed = withContext(Dispatchers.IO) { SyntaxPackManager.installed(context) }
+                activeSyntax = withContext(Dispatchers.IO) { SyntaxPackManager.activeSyntax(context) }
                 status = "Пакетов в каталоге: ${result.size}"
             } catch (e: Exception) {
                 status = "Не удалось обновить каталог: ${e.message ?: "ошибка сети"}"
@@ -85,37 +87,58 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
                 )
                 if (pack.description.isNotBlank())
                     Text(pack.description, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp))
-                Button(
-                    onClick = {
-                        scope.launch {
-                            busy = pack.id
-                            try {
-                                if (pack.id in installed) {
-                                    withContext(Dispatchers.IO) { SyntaxPackManager.remove(context, pack) }
-                                    installed = installed - pack.id
-                                    status = "Пакет «${pack.name}» удалён"
-                                } else {
-                                    withContext(Dispatchers.IO) { SyntaxPackManager.install(context, pack) }
-                                    installed = installed + pack.id
-                                    if (pack.type == "lexicon")
-                                        withContext(Dispatchers.IO) { GlideEngine.reloadLexicons() }
-                                    status = "Пакет «${pack.name}» установлен"
+                if (pack.type == "syntax" && pack.id in installed && activeSyntax != pack.id) {
+                    Button(
+                        onClick = {
+                            SyntaxPackManager.setActiveSyntax(context, pack.id)
+                            activeSyntax = pack.id
+                            status = "Активирован синтаксис ${pack.name}"
+                        },
+                        enabled = busy.isEmpty(),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) { Text("Использовать") }
+                } else {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                busy = pack.id
+                                try {
+                                    if (pack.id in installed) {
+                                        withContext(Dispatchers.IO) { SyntaxPackManager.remove(context, pack) }
+                                        if (activeSyntax == pack.id) {
+                                            SyntaxPackManager.setActiveSyntax(context, null)
+                                            activeSyntax = null
+                                        }
+                                        installed = installed - pack.id
+                                        status = "Пакет «${pack.name}» удалён"
+                                    } else {
+                                        withContext(Dispatchers.IO) { SyntaxPackManager.install(context, pack) }
+                                        installed = installed + pack.id
+                                        if (pack.type == "lexicon") {
+                                            withContext(Dispatchers.IO) { GlideEngine.reloadLexicons() }
+                                        } else {
+                                            SyntaxPackManager.setActiveSyntax(context, pack.id)
+                                            activeSyntax = pack.id
+                                        }
+                                        status = "Пакет «${pack.name}» установлен"
+                                    }
+                                } catch (e: Exception) {
+                                    status = "Ошибка пакета «${pack.name}»: ${e.message ?: "неизвестная ошибка"}"
+                                } finally {
+                                    busy = ""
                                 }
-                            } catch (e: Exception) {
-                                status = "Ошибка пакета «${pack.name}»: ${e.message ?: "неизвестная ошибка"}"
-                            } finally {
-                                busy = ""
                             }
-                        }
-                    },
-                    enabled = busy.isEmpty(),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(when {
-                        busy == pack.id -> "Подождите…"
-                        pack.id in installed -> "Удалить"
-                        else -> "Скачать"
-                    })
+                        },
+                        enabled = busy.isEmpty(),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Text(when {
+                            busy == pack.id -> "Подождите…"
+                            pack.id in installed && pack.type == "syntax" -> "Удалить · выбран"
+                            pack.id in installed -> "Удалить"
+                            else -> "Скачать"
+                        })
+                    }
                 }
             }
         }
