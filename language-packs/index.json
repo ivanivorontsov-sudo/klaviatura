@@ -1,0 +1,348 @@
+{
+  "version": 1,
+  "updated": "2026-11-23",
+  "packs": [
+    {
+      "id": "syntax_python",
+      "name": "Python",
+      "language": "python",
+      "type": "syntax",
+      "path": "language-packs/syntax/python.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Python.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_javascript",
+      "name": "JavaScript",
+      "language": "javascript",
+      "type": "syntax",
+      "path": "language-packs/syntax/javascript.json",
+      "description": "Голосовые команды, ключевые слова и конструкции JavaScript.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_typescript",
+      "name": "TypeScript",
+      "language": "typescript",
+      "type": "syntax",
+      "path": "language-packs/syntax/typescript.json",
+      "description": "Голосовые команды, ключевые слова и конструкции TypeScript.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_java",
+      "name": "Java",
+      "language": "java",
+      "type": "syntax",
+      "path": "language-packs/syntax/java.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Java.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_kotlin",
+      "name": "Kotlin",
+      "language": "kotlin",
+      "type": "syntax",
+      "path": "language-packs/syntax/kotlin.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Kotlin.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_c",
+      "name": "C",
+      "language": "c",
+      "type": "syntax",
+      "path": "language-packs/syntax/c.json",
+      "description": "Голосовые команды, ключевые слова и конструкции C.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_cpp",
+      "name": "C++",
+      "language": "cpp",
+      "type": "syntax",
+      "path": "language-packs/syntax/cpp.json",
+      "description": "Голосовые команды, ключевые слова и конструкции C++.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_csharp",
+      "name": "C#",
+      "language": "csharp",
+      "type": "syntax",
+      "path": "language-packs/syntax/csharp.json",
+      "description": "Голосовые команды, ключевые слова и конструкции C#.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_go",
+      "name": "Go",
+      "language": "go",
+      "type": "syntax",
+      "path": "language-packs/syntax/go.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Go.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_rust",
+      "name": "Rust",
+      "language": "rust",
+      "type": "syntax",
+      "path": "language-packs/syntax/rust.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Rust.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_swift",
+      "name": "Swift",
+      "language": "swift",
+      "type": "syntax",
+      "path": "language-packs/syntax/swift.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Swift.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_php",
+      "name": "PHP",
+      "language": "php",
+      "type": "syntax",
+      "path": "language-packs/syntax/php.json",
+      "description": "Голосовые команды, ключевые слова и конструкции PHP.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_ruby",
+      "name": "Ruby",
+      "language": "ruby",
+      "type": "syntax",
+      "path": "language-packs/syntax/ruby.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Ruby.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_sql",
+      "name": "SQL",
+      "language": "sql",
+      "type": "syntax",
+      "path": "language-packs/syntax/sql.json",
+      "description": "Голосовые команды, ключевые слова и конструкции SQL.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_html",
+      "name": "HTML",
+      "language": "html",
+      "type": "syntax",
+      "path": "language-packs/syntax/html.json",
+      "description": "Голосовые команды, ключевые слова и конструкции HTML.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_css",
+      "name": "CSS",
+      "language": "css",
+      "type": "syntax",
+      "path": "language-packs/syntax/css.json",
+      "description": "Голосовые команды, ключевые слова и конструкции CSS.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_bash",
+      "name": "Bash",
+      "language": "bash",
+      "type": "syntax",
+      "path": "language-packs/syntax/bash.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Bash.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_lua",
+      "name": "Lua",
+      "language": "lua",
+      "type": "syntax",
+      "path": "language-packs/syntax/lua.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Lua.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_dart",
+      "name": "Dart",
+      "language": "dart",
+      "type": "syntax",
+      "path": "language-packs/syntax/dart.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Dart.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_r",
+      "name": "R",
+      "language": "r",
+      "type": "syntax",
+      "path": "language-packs/syntax/r.json",
+      "description": "Голосовые команды, ключевые слова и конструкции R.",
+      "sha256": ""
+    },
+    {
+      "id": "syntax_pon",
+      "name": "Понятный",
+      "language": "pon",
+      "type": "syntax",
+      "path": "language-packs/syntax/pon.json",
+      "description": "Голосовые команды, ключевые слова и конструкции Понятный.",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_ru",
+      "name": "Свайп-словарь RU",
+      "language": "ru",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/ru.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (ru).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_en",
+      "name": "Свайп-словарь EN",
+      "language": "en",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/en.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (en).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_pl",
+      "name": "Свайп-словарь PL",
+      "language": "pl",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/pl.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (pl).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_uk",
+      "name": "Свайп-словарь UK",
+      "language": "uk",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/uk.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (uk).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_de",
+      "name": "Свайп-словарь DE",
+      "language": "de",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/de.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (de).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_fr",
+      "name": "Свайп-словарь FR",
+      "language": "fr",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/fr.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (fr).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_es",
+      "name": "Свайп-словарь ES",
+      "language": "es",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/es.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (es).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_it",
+      "name": "Свайп-словарь IT",
+      "language": "it",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/it.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (it).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_pt",
+      "name": "Свайп-словарь PT",
+      "language": "pt",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/pt.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (pt).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_nl",
+      "name": "Свайп-словарь NL",
+      "language": "nl",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/nl.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (nl).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_sv",
+      "name": "Свайп-словарь SV",
+      "language": "sv",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/sv.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (sv).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_tr",
+      "name": "Свайп-словарь TR",
+      "language": "tr",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/tr.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (tr).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_bg",
+      "name": "Свайп-словарь BG",
+      "language": "bg",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/bg.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (bg).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_ro",
+      "name": "Свайп-словарь RO",
+      "language": "ro",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/ro.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (ro).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_hu",
+      "name": "Свайп-словарь HU",
+      "language": "hu",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/hu.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (hu).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_el",
+      "name": "Свайп-словарь EL",
+      "language": "el",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/el.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (el).",
+      "sha256": ""
+    },
+    {
+      "id": "swipe_cs",
+      "name": "Свайп-словарь CS",
+      "language": "cs",
+      "type": "lexicon",
+      "path": "app/src/main/assets/glide/cs.tsv",
+      "description": "Обновляемый офлайн-словарь форм для свайп-ввода (cs).",
+      "sha256": ""
+    }
+  ]
+}
