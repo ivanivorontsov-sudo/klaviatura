@@ -319,9 +319,9 @@ object GlideEngine : GlideLearning {
         if (ru.klaviatura.text.Profanity.blocks(word)) return // learned only when the filter is off
         forgotten.remove(word)
         unigrams.merge(word, 1, Int::plus)
-        val previous = ngram.getNthPrevWord(1)?.toString()?.lowercase()
+        val previous = ngram.getNthPrevWord(1)?.toString()?.lowercase(Locale.ROOT)?.replace('ё', 'е')
         previous?.let { bigrams.merge("$it\t$word", 1, Int::plus) }
-        val previousPrevious = ngram.getNthPrevWord(2)?.toString()?.lowercase()
+        val previousPrevious = ngram.getNthPrevWord(2)?.toString()?.lowercase(Locale.ROOT)?.replace('ё', 'е')
         if (previousPrevious != null && previous != null)
             trigrams.merge("$previousPrevious\t$previous\t$word", 1, Int::plus)
         // new words become swipeable in the matching script
