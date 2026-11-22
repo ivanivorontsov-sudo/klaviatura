@@ -215,6 +215,7 @@ object GlideEngine : GlideLearning {
         val decoder = cachedDecoder?.takeIf { it.keys == keys } ?: GlideDecoder(keys).also { cachedDecoder = it }
         val p = data.mInputPointers
         val prevRaw = ngram.getNthPrevWord(1)?.toString()
+        lastPreviousPrevious = ngram.getNthPrevWord(2)?.toString()?.lowercase(Locale.ROOT)?.replace('ё', 'е')
         val prev = prevRaw?.lowercase()
         holdMs = appContext?.let { it.prefs().getInt(PREF_HOLD_MS, GestureRestart.DEFAULT_HOLD_MS) } ?: GestureRestart.DEFAULT_HOLD_MS
         if (p.pointerSize < 8) lastLoopStart = 0
@@ -287,6 +288,7 @@ object GlideEngine : GlideLearning {
     /** languages with Cyrillic script (for learning new words into the right lexicon) */
     private val CYR = setOf("ru", "uk", "bg", "be", "sr", "mk", "kk")
     @Volatile private var lastMainLang = "ru"
+    @Volatile private var lastPreviousPrevious: String? = null
     private fun learnLang(word: String): String {
         val cyr = word.any { it in '\u0400'..'\u04FF' }
         val main = lastMainLang
@@ -299,9 +301,15 @@ object GlideEngine : GlideLearning {
     // ---- learning (local only) ----
     override fun wordBoost(word: String): Double = unigrams[word]?.let { 0.25 * ln(1.0 + it) } ?: 0.0
     override fun bigramBoost(prev: String?, word: String): Double =
-        if (prev == null || isUnwantedHelpUkrainePair(prev, word)) 0.0 else
-            (bigrams["$prev\t$word"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
-                GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(prev, word) } ?: 0.0)
+        if (prev == null || isUnwantedHelpUkrainePair(prev, word)) 0.0 else {
+            val p = prev.lowercase(Locale.ROOT).replace('ё', 'е')
+            val w = word.lowercase(Locale.ROOT).replace('ё', 'е')
+            val p2 = lastPreviousPrevious
+            val tri = if (p2 == null) 0.0 else
+                trigrams["$p2\\t$p\\t$w"]?.let { 0.45 * ln(1.0 + it) } ?: 0.0
+            (bigrams["$p\\t$w"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
+                tri + GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(p, w) } ?: 0.0)
+        }
     override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
 
     /** called for every committed word (typed, swiped or picked from suggestions) */
