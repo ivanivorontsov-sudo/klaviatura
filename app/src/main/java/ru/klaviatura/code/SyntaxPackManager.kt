@@ -19,7 +19,7 @@ object SyntaxPackManager {
     private const val BASE = "https://raw.githubusercontent.com/ivanivorontsov-sudo/klaviatura/main/"
     private const val CATALOG = "language-packs/index.json"
     private const val MAX_CATALOG = 512 * 1024
-    private const val MAX_PACK = 12 * 1024 * 1024
+    private const val MAX_PACK = 40 * 1024 * 1024
     private const val MAX_REDIRECTS = 5
 
     data class Pack(
@@ -159,7 +159,7 @@ object SyntaxPackManager {
             val connection = URL(current).openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
+            connection.readTimeout = 90_000
             connection.setRequestProperty("User-Agent", "Klaviatura-LanguagePacks/1.0")
             val code = connection.responseCode
             if (code in 300..399) {
