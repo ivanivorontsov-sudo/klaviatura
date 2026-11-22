@@ -110,10 +110,10 @@ object GlideEngine : GlideLearning {
         val p2 = previousPrevious?.lowercase(Locale.ROOT)?.replace('ё', 'е')
         val curated = CURATED_NEXT_WORDS[p].orEmpty()
         val tri = if (p2 == null) emptyList() else trigrams.entries
-            .filter { it.key.startsWith("$p2\\t$p\\t") }
+            .filter { it.key.startsWith("$p2\t$p\t") }
             .sortedByDescending { it.value }
-            .map { it.key.substringAfterLast('\\t') }
-        val user = bigrams.entries.filter { it.key.startsWith("$p\\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\\t') }
+            .map { it.key.substringAfterLast('\t') }
+        val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
         val base = lms.values.flatMap { it.next(p, n) }
         return (curated + tri + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
@@ -311,7 +311,11 @@ object GlideEngine : GlideLearning {
         if (ru.klaviatura.text.Profanity.blocks(word)) return // learned only when the filter is off
         forgotten.remove(word)
         unigrams.merge(word, 1, Int::plus)
-        ngram.getNthPrevWord(1)?.toString()?.lowercase()?.let { bigrams.merge("$it\t$word", 1, Int::plus) }
+        val previous = ngram.getNthPrevWord(1)?.toString()?.lowercase()
+        previous?.let { bigrams.merge("$it\t$word", 1, Int::plus) }
+        val previousPrevious = ngram.getNthPrevWord(2)?.toString()?.lowercase()
+        if (previousPrevious != null && previous != null)
+            trigrams.merge("$previousPrevious\t$previous\t$word", 1, Int::plus)
         // new words become swipeable in the matching script
         lexicons[learnLang(word)]?.let { if (!it.contains(word)) synchronized(it) { it.add(word, 1) } }
         // adapt to the user's gesture style: average offset of start/end points to the chosen word's keys
@@ -334,6 +338,7 @@ object GlideEngine : GlideLearning {
         val word = rawWord.lowercase()
         unigrams.remove(word); forgotten.add(word)
         bigrams.keys.removeIf { it.endsWith("\t$word") }
+        trigrams.keys.removeIf { it.endsWith("\t$word") }
         scheduleSave()
     }
 
@@ -352,6 +357,7 @@ object GlideEngine : GlideLearning {
         append("bias\t$biasX\t$biasY\n")
         unigrams.forEach { (w, c) -> append("u\t$w\t$c\n") }
         bigrams.forEach { (w, c) -> append("b\t$w\t$c\n") }
+        trigrams.forEach { (w, c) -> append("t\t$w\t$c\n") }
         forgotten.forEach { append("f\t$it\n") }
     }
 
@@ -363,6 +369,7 @@ object GlideEngine : GlideLearning {
                 "bias" -> if (p.size >= 3) { biasX = p[1].toFloatOrNull() ?: 0f; biasY = p[2].toFloatOrNull() ?: 0f }
                 "u" -> if (p.size >= 3) unigrams.merge(p[1], p[2].toIntOrNull() ?: 1, Int::plus)
                 "b" -> if (p.size >= 4) bigrams.merge(p[1] + "\t" + p[2], p[3].toIntOrNull() ?: 1, Int::plus)
+                "t" -> if (p.size >= 5) trigrams.merge(p[1] + "\t" + p[2] + "\t" + p[3], p[4].toIntOrNull() ?: 1, Int::plus)
                 "f" -> if (p.size >= 2) forgotten.add(p[1])
             }
         }
