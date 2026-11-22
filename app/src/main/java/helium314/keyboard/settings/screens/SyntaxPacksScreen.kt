@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.utils.BackButton
-import helium314.keyboard.settings.SearchScreen
 import ru.klaviatura.code.SyntaxPackManager
 import ru.klaviatura.glide.GlideEngine
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +62,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         Row(Modifier.fillMaxWidth()) {
-            BackButton(onClick = onClickBack)
+            BackButton { onClickBack() }
             Text("Словари и синтаксисы", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 12.dp))
         }
         Text(
