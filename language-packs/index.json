@@ -343,6 +343,24 @@
       "path": "app/src/main/assets/glide/cs.tsv",
       "description": "Обновляемый офлайн-словарь форм для свайп-ввода (cs).",
       "sha256": ""
+    },
+    {
+      "id": "dev_ru",
+      "name": "Словарь разработчика",
+      "language": "ru",
+      "type": "lexicon",
+      "path": "language-packs/dictionaries/dev_ru.tsv",
+      "description": "Термины разработки, Git, сборки, интерфейсов и нейросетей.",
+      "sha256": ""
+    },
+    {
+      "id": "slang_ru",
+      "name": "Разговорный словарь",
+      "language": "ru",
+      "type": "lexicon",
+      "path": "language-packs/dictionaries/slang_ru.tsv",
+      "description": "Частый современный разговорный сленг и интернет-лексика.",
+      "sha256": ""
     }
   ]
 }
