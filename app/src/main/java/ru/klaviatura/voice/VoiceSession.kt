@@ -96,6 +96,9 @@ object VoiceText {
             w.isNotEmpty() && w.all { ch -> !ch.isLetter() || (if (cyr) ch in '\u0400'..'\u04FF' else ch !in '\u0400'..'\u04FF') }
         }
         words = dedupe(words)
+        // ASR often spells the spoken abbreviation «ИИ» as two separate conjunctions.
+        // Merge only the unambiguous phrase «как и и»; ordinary «и и» remains untouched.
+        words = mergeContextualInitialisms(words)
         words = words.map { ru.klaviatura.text.Yo.fix(ru.klaviatura.text.Profanity.mask(it)) }
         if (commands) words = punctuate(words, lang)
         words = capitalize(words)
@@ -106,6 +109,24 @@ object VoiceText {
      * Voice partials are cumulative. Once a user edits the text, that spoken prefix is already
      * committed and must not be inserted again when the recognizer sends the full phrase next time.
      */
+    /** Repairs only a high-confidence Russian ASR abbreviation pattern, not normal conjunctions. */
+    fun mergeContextualInitialisms(words: List<String>): List<String> {
+        val out = ArrayList<String>()
+        var i = 0
+        while (i < words.size) {
+            if (i + 2 < words.size && words[i].equals("как", true) &&
+                words[i + 1].equals("и", true) && words[i + 2].equals("и", true)) {
+                out.add(words[i])
+                out.add("ИИ")
+                i += 3
+            } else {
+                out.add(words[i])
+                i++
+            }
+        }
+        return out
+    }
+
     fun afterCommittedPrefix(raw: String, committedPrefix: String): String {
         val text = raw.trim()
         val prefix = committedPrefix.trim()
