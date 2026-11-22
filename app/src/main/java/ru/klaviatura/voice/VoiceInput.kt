@@ -33,6 +33,7 @@ object VoiceInput {
     const val ENGINE_GOOGLE = "google"
     const val PREF_MIXED = "kl_voice_mixed"
     const val PREF_COMMANDS = "kl_voice_commands"
+    const val PREF_VOICE_CODE_MODE = "kl_voice_code_mode"
     /** 1.4.0: how long recording continues without speech (seconds); [SILENCE_NEVER] = until the mic is tapped */
     const val PREF_SILENCE_S = "kl_voice_silence_s"
     const val DEFAULT_SILENCE_S = 20
@@ -56,7 +57,10 @@ object VoiceInput {
     /** Drop recognizer callbacks queued before the user edited text or moved the caret. */
     fun invalidatePendingOutput() { outputRevision.incrementAndGet() }
 
-    fun init(context: Context) { ctx = context.applicationContext }
+    fun init(context: Context) {
+        ctx = context.applicationContext
+        ru.klaviatura.code.SyntaxPackManager.init(context)
+    }
 
     /** Current voice engine; default is the built-in offline engine. Migrates the old boolean pref. */
     fun engine(): String {
@@ -279,7 +283,8 @@ object VoiceInput {
             // the recognizer gets the REAL rate of the recorder (Vosk resamples if it differs from 16 kHz)
             val rate = rec.sampleRate.toFloat()
             val commands = ctx?.prefs()?.getBoolean(PREF_COMMANDS, true) != false
-            session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands, ru.klaviatura.code.CodeMode.active)
+            val codeMode = ru.klaviatura.code.CodeMode.active || ctx?.prefs()?.getBoolean(PREF_VOICE_CODE_MODE, false) == true
+            session = VoiceSession(initial.map { it to asr(it, rate) }, out, commands, codeMode)
             rec.startRecording()
             // Do not claim to be listening while the recorder and recognizer are still starting.
             starting = false
