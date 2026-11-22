@@ -139,6 +139,8 @@ object CodeVoice {
     fun rewrite(raw: String, lang: String = "ru"): String {
         if (raw.isBlank()) return raw
         val tokens = raw.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val installedPhrases = SyntaxPackManager.spokenPhrases()
+        val installedKeywords = SyntaxPackManager.spokenKeywords()
         val out = ArrayList<String>()
         var i = 0
         var style = Style.NONE
@@ -174,7 +176,7 @@ object CodeVoice {
                 for (k in ph.words.indices) if (norm(tokens[at + k]) != ph.words[k]) { ok = false; break }
                 if (ok) return ph
             }
-            for ((spoken, output) in SyntaxPackManager.spokenPhrases().entries.sortedByDescending { it.key.split(Regex("\\s+")).size }) {
+            for ((spoken, output) in installedPhrases.entries.sortedByDescending { it.key.split(Regex("\\s+")).size }) {
                 val phraseWords = spoken.split(Regex("\\s+"))
                 if (at + phraseWords.size > tokens.size) continue
                 if (phraseWords.indices.all { norm(tokens[at + it]) == phraseWords[it] })
@@ -207,7 +209,7 @@ object CodeVoice {
             if (ph != null) {
                 out.add(ph.out); i += ph.words.size; continue
             }
-            out.add(SyntaxPackManager.spokenKeywords()[norm(tokens[i])] ?: tokens[i]); i++
+            out.add(installedKeywords[norm(tokens[i])] ?: tokens[i]); i++
         }
         flushIdent()
         return glueSymbols(out)
