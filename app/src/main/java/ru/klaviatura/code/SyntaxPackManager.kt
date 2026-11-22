@@ -129,7 +129,8 @@ object SyntaxPackManager {
     fun spokenKeywords(): Map<String, String> {
         val context = appContext ?: return emptyMap()
         val result = LinkedHashMap<String, String>()
-        root(context).listFiles()?.filter { it.extension == "json" }?.forEach { file ->
+        val active = activeSyntax(context) ?: return emptyMap()
+        root(context).listFiles()?.filter { it.extension == "json" && it.nameWithoutExtension == active }?.forEach { file ->
             runCatching {
                 val json = JSONObject(file.readText())
                 val keywords = json.optJSONObject("keywords") ?: return@runCatching
