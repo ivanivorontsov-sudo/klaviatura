@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -72,7 +72,23 @@ jobs:
       - name: Upload signed update APK
         uses: actions/upload-artifact@v4
         with:
-          name: Klaviatura-update-v1.5.7
+          name: Klaviatura-update-v1.5.10
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.5.10
+          target_commitish: main
+          name: Клавиатура v1.5.10
+          body: |
+            ## Клавиатура v1.5.10
+
+            - Расширен русский словарь свайп-ввода: добавлены формы слов «подтверждениями», «сверь», «росте», «перейди», «поищи» и родственные варианты.
+            - Улучшена контекстная нормализация Google Voice: распознавание «как ИИ» без глобальной замены обычных сочетаний «и и».
+            - Добавлены unit-тесты для контекстной обработки аббревиатуры.
+            - APK собран с release-подписью; перед публикацией выполняются unit-тесты и проверка JNI/подписи.
+          files: app/build/outputs/apk/release/*.apk
+
