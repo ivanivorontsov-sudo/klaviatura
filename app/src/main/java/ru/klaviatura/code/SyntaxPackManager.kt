@@ -33,7 +33,16 @@ object SyntaxPackManager {
     )
 
     @Volatile private var appContext: Context? = null
+    private const val PREFS = "kl_language_packs"
+    private const val PREF_ACTIVE_SYNTAX = "active_syntax"
     fun init(context: Context) { appContext = context.applicationContext }
+
+    fun activeSyntax(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_ACTIVE_SYNTAX, null)
+
+    fun setActiveSyntax(context: Context, id: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(PREF_ACTIVE_SYNTAX, id).apply()
+    }
 
     private fun root(context: Context) = File(context.filesDir, "language-packs").apply { mkdirs() }
     private fun installedFile(context: Context, pack: Pack) =
@@ -100,7 +109,8 @@ object SyntaxPackManager {
     fun spokenPhrases(): Map<String, String> {
         val context = appContext ?: return emptyMap()
         val result = LinkedHashMap<String, String>()
-        root(context).listFiles()?.filter { it.extension == "json" }?.forEach { file ->
+        val active = activeSyntax(context) ?: return emptyMap()
+        root(context).listFiles()?.filter { it.extension == "json" && it.nameWithoutExtension == active }?.forEach { file ->
             runCatching {
                 val json = JSONObject(file.readText())
                 val phrases = json.optJSONObject("phrases") ?: return@runCatching
