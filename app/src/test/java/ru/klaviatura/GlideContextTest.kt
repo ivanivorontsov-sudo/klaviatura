@@ -77,12 +77,12 @@ class GlideContextTest {
     }
 
     @Test fun personalTrigramsUseTwoPreviousWordsAndPersist() {
-        GlideEngine.import("t\\tкак\\tдела\\tхорошо\\t100\\nt\\tесли\\tдела\\tплохо\\t2\\n", true)
+        GlideEngine.import("t\tкак\tдела\tхорошо\t100\nt\tесли\tдела\tплохо\t2\n", true)
         try {
             assertEquals("хорошо", GlideEngine.predictNext("дела", 3, "как").first())
             assertEquals("плохо", GlideEngine.predictNext("дела", 3, "если").firstOrNull())
             val exported = GlideEngine.export()
-            assertTrue(exported.contains("t\\tкак\\tдела\\tхорошо\\t100"))
+            assertTrue(exported.contains("t\tкак\tдела\tхорошо\t100"))
         } finally {
             GlideEngine.import("", true)
         }
