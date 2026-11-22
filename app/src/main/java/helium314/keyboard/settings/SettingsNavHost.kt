@@ -79,6 +79,7 @@ fun SettingsNavHost(
                 onClickLanguage = { navController.navigate(SettingsDestination.Languages) },
                 onClickLayouts = { navController.navigate(SettingsDestination.Layouts) },
                 onClickDictionaries = { navController.navigate(SettingsDestination.Dictionaries) },
+                onClickLanguagePacks = { navController.navigate(SettingsDestination.SyntaxPacks) },
                 onClickBack = ::goBack,
             )
         }
