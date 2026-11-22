@@ -207,7 +207,7 @@ object CodeVoice {
             if (ph != null) {
                 out.add(ph.out); i += ph.words.size; continue
             }
-            out.add(tokens[i]); i++
+            out.add(SyntaxPackManager.spokenKeywords()[norm(tokens[i])] ?: tokens[i]); i++
         }
         flushIdent()
         return glueSymbols(out)
