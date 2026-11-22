@@ -306,8 +306,8 @@ object GlideEngine : GlideLearning {
             val w = word.lowercase(Locale.ROOT).replace('ё', 'е')
             val p2 = lastPreviousPrevious
             val tri = if (p2 == null) 0.0 else
-                trigrams["$p2\\t$p\\t$w"]?.let { 0.45 * ln(1.0 + it) } ?: 0.0
-            (bigrams["$p\\t$w"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
+                trigrams["$p2\t$p\t$w"]?.let { 0.45 * ln(1.0 + it) } ?: 0.0
+            (bigrams["$p\t$w"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
                 tri + GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(p, w) } ?: 0.0)
         }
     override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
