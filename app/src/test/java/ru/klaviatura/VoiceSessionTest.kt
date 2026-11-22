@@ -52,6 +52,11 @@ class VoiceSessionTest {
         assertEquals("один четыре", ed.text.toString())
     }
 
+    @Test fun russianAiAbbreviationIsJoinedOnlyInClearContext() {
+        assertEquals("как ИИ работает", VoiceText.format("как и и работает", "ru", false))
+        assertEquals("чай и и кофе", VoiceText.format("чай и и кофе", "ru", false))
+    }
+
     @Test fun repeatsCollapsed() {
         assertEquals("один ты", VoiceText.format("один ты ты ты ты", "ru", false))
         assertEquals("да да", VoiceText.format("да да", "ru", false))
