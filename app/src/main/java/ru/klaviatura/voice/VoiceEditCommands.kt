@@ -55,16 +55,19 @@ object VoiceEditCommands {
         val ordinalReplace = Regex("^(?:исправь|замени)\\s+(\\d+|[а-я]+)(?:\\s+по счету)?\\s+слово\\s+на\\s+(.+)$").matchEntire(normalized)
         if (ordinalReplace != null) {
             val n = ordinalReplace.groupValues[1].toIntOrNull() ?: ordinals[ordinalReplace.groupValues[1]] ?: return null
-            val replacement = spoken.substringAfter(Regex("(?i)\\s+на\\s+"), "").trim().trimEnd('.', '!', '?', ',')
+            val split = spoken.indexOf(" на ", ignoreCase = true)
+            val replacement = if (split >= 0) spoken.substring(split + 4).trim().trimEnd('.', '!', '?', ',') else return null
             if (replacement.isEmpty()) return null
             return wordEdit(text, n, replacement, "Слово заменено")
         }
 
         val replace = Regex("^(?:исправь|замени)\\s+(.+?)\\s+на\\s+(.+)$").matchEntire(normalized)
         if (replace != null) {
-            val old = spoken.substringAfter(Regex("(?i)^(?:исправь|замени)\\s+"), "")
-                .substringBefore(Regex("(?i)\\s+на\\s+"), "").trim()
-            val replacement = spoken.substringAfter(Regex("(?i)\\s+на\\s+"), "").trim().trimEnd('.', '!', '?', ',')
+            val prefix = Regex("(?i)^(?:исправь|замени)\\s+").find(spoken)?.value?.length ?: return null
+            val split = spoken.indexOf(" на ", startIndex = prefix, ignoreCase = true)
+            val old = if (split >= 0) spoken.substring(prefix, split).trim() else return null
+            val split = spoken.indexOf(" на ", ignoreCase = true)
+            val replacement = if (split >= 0) spoken.substring(split + 4).trim().trimEnd('.', '!', '?', ',') else return null
             if (old.isEmpty() || replacement.isEmpty()) return null
             val at = lastIndexOfIgnoreCase(text, old)
             if (at < 0) return null
@@ -73,7 +76,8 @@ object VoiceEditCommands {
 
         val delete = Regex("^(?:удали|убери)\\s+(.+)$").matchEntire(normalized)
         if (delete != null) {
-            val phrase = spoken.substringAfter(Regex("(?i)^(?:удали|убери)\\s+"), "").trim().trimEnd('.', '!', '?', ',')
+            val prefix = Regex("(?i)^(?:удали|убери)\\s+").find(spoken)?.value?.length ?: return null
+            val phrase = spoken.substring(prefix).trim().trimEnd('.', '!', '?', ',')
             if (phrase.isEmpty()) return null
             val at = lastIndexOfIgnoreCase(text, phrase)
             if (at < 0) return null
