@@ -72,7 +72,7 @@ jobs:
       - name: Upload signed update APK
         uses: actions/upload-artifact@v4
         with:
-          name: Klaviatura-update-v1.5.12
+          name: Klaviatura-update-v1.5.13
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -80,11 +80,14 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.12
+          tag_name: v1.5.13
           target_commitish: main
-          name: Клавиатура v1.5.12
+          name: Клавиатура v1.5.13
           body: |
-            ## Клавиатура v1.5.12
+            ## Клавиатура v1.5.13
+
+- Добавлен встроенный диктофон: долгое нажатие на микрофон открывает запись, прослушивание и отправку локального аудиофайла через системное меню приложений.
+- Голосовой ввод получил локальный словарь технических терминов и контекстные подсказки системному распознавателю Android 13+ (РКН, VPN, БМП, БЦЖ, API, GPS, USB и др.).
 
             - Расширен русский словарь свайп-ввода.
             - Аббревиатура «ИИ» защищена от автозамены на «им» и сохраняет заглавные буквы в голосовом вводе и свайп-подсказках.
