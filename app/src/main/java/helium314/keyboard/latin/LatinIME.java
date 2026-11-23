@@ -1766,6 +1766,7 @@ public class LatinIME extends InputMethodService implements
     }
 
     /** Opens the built-in local audio recorder from the microphone key's long-press menu. */
+    @Override
     public void openVoiceRecorder() {
         try {
             ru.klaviatura.voice.VoiceInput.INSTANCE.setExternalTarget(mVoiceTarget);
