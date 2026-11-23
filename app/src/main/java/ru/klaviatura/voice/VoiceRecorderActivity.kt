@@ -58,7 +58,7 @@ class VoiceRecorderActivity : Activity() {
         }
         recordButton = Button(this).apply { text = "● Начать запись"; setOnClickListener { toggleRecording() } }
         val play = Button(this).apply { text = "▶ Прослушать запись"; setOnClickListener { playRecording() } }
-        val share = Button(this).apply { text = "Отправить аудиофайл…"; setOnClickListener { shareRecording() } }
+        val share = Button(this).apply { text = "Прикрепить аудиофайл к чату…"; setOnClickListener { shareRecording() } }
         val choose = Button(this).apply { text = "Выбрать аудиофайл…"; setOnClickListener { chooseAudio() } }
         transcribeButton = Button(this).apply {
             text = "Расшифровать локально"
@@ -217,13 +217,13 @@ class VoiceRecorderActivity : Activity() {
         runCatching {
             val uri: Uri = FileProvider.getUriForFile(this, "$packageName.voicefiles", file)
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = "audio/mp4"
+                type = "audio/*"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 clipData = ClipData.newUri(contentResolver, file.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(send, "Отправить аудиозапись"))
-            status.text = "Выберите приложение для отправки аудиофайла"
+            startActivity(Intent.createChooser(send, "Прикрепить аудиозапись"))
+            status.text = "Выберите приложение или чат для отправки аудиофайла"
         }.onFailure {
             Toast.makeText(this, "Не удалось подготовить аудиофайл: ${it.message}", Toast.LENGTH_LONG).show()
         }
