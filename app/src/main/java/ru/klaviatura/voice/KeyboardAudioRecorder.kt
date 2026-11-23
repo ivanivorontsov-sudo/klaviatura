@@ -161,6 +161,17 @@ object KeyboardAudioRecorder {
         publish()
     }
 
+    /** Hide the inline controls while keeping the completed file in the recordings library. */
+    @Synchronized
+    fun dismissUi() {
+        if (state == State.RECORDING || state == State.PAUSED) return
+        state = State.IDLE
+        startedAtMs = 0L
+        pausedAtMs = 0L
+        pausedDurationMs = 0L
+        publish()
+    }
+
     @Synchronized
     fun deleteCurrent() {
         if (state == State.RECORDING || state == State.PAUSED) stop()
