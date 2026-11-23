@@ -74,8 +74,8 @@ class VoiceSessionTest {
 
     @Test fun mixedModeChoosesRussianWhenEnglishModelHasHigherConfidence() {
         val ed = Ed()
-        val english = Fake(listOf(listOf("hello" to 0.99, "world" to 0.98)))
-        val russian = Fake(listOf(listOf("привет" to 0.72, "мир" to 0.70)))
+        val english = Fake(listOf(listOf("yellow" to 0.99, "birds" to 0.98, "fly" to 0.97)))
+        val russian = Fake(listOf(listOf("я" to 0.72, "хочу" to 0.70, "говорить" to 0.69, "сегодня" to 0.68)))
         val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
         session.feed(ShortArray(10), 10)
         assertEquals("привет мир", ed.text.toString())
@@ -83,11 +83,21 @@ class VoiceSessionTest {
 
     @Test fun mixedModeShowsPartialFromLanguageMatchingItsScript() {
         val ed = Ed()
-        val english = Fake(listOf("hello world"))
-        val russian = Fake(listOf("привет мир"))
+        val english = Fake(listOf("yellow birds flying"))
+        val russian = Fake(listOf("я хочу говорить"))
         val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
         session.feed(ShortArray(10), 10)
         assertEquals("привет мир", ed.comp)
+    }
+
+
+    @Test fun mixedModeCanSwitchToEnglishWhenItHasClearLanguageEvidence() {
+        val ed = Ed()
+        val russian = Fake(listOf(listOf("заработанный" to 0.99, "ветер" to 0.98, "летит" to 0.97)))
+        val english = Fake(listOf(listOf("hello" to 0.80, "my" to 0.79, "name" to 0.78, "is" to 0.77)))
+        val session = VoiceSession(listOf("ru" to russian, "en" to english), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("hello my name is", ed.text.toString())
     }
 
     @Test fun scriptCompatibilityScoresCyrillicAndLatinIndependently() {
