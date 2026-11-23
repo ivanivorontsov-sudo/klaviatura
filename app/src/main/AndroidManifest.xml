@@ -115,6 +115,14 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
             </intent-filter>
         </receiver>
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.voicefiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/voice_recorder_paths" />
+        </provider>
+
         <!-- for pasting files from internal clipboard -->
         <provider android:name="helium314.keyboard.latin.database.ClipboardContentProvider"
             android:authorities="@string/clipboard_provider_authority"
@@ -137,6 +145,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
                 android:resource="@xml/gesture_data_path"/>
         </provider>
         <activity android:name="ru.klaviatura.voice.ModelImportActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity android:name="ru.klaviatura.voice.VoiceRecorderActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="portrait" />
         <activity android:name="ru.klaviatura.voice.VoicePermissionActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
         <activity android:name="ru.klaviatura.bg.AiBackgroundActivity" android:exported="false"
