@@ -156,10 +156,14 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val defaultVoiceStatusWidth = voiceStatusContainer.layoutParams.width
     private var inlineRecorderActive = false
     private var voiceStatusActive = false
+    private var recorderTimerLabel: TextView? = null
     private val recorderUiTicker = object : Runnable {
         override fun run() {
             if (inlineRecorderActive && KeyboardAudioRecorder.state() == KeyboardAudioRecorder.State.RECORDING) {
-                renderInlineRecorder(KeyboardAudioRecorder.state(), KeyboardAudioRecorder.file(), KeyboardAudioRecorder.elapsedMs())
+                val elapsedMs = KeyboardAudioRecorder.elapsedMs()
+                val minutes = elapsedMs / 60_000
+                val seconds = (elapsedMs / 1_000) % 60
+                recorderTimerLabel?.text = "● %02d:%02d".format(minutes, seconds)
                 recorderUiHandler.postDelayed(this, 500L)
             }
         }
@@ -659,6 +663,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         voiceStatusLabel.isGone = inlineRecorderActive
         recorderControlsScroll.isVisible = inlineRecorderActive
         recorderControls.removeAllViews()
+        recorderTimerLabel = null
 
         if (inlineRecorderActive) {
             val minutes = elapsedMs / 60_000
@@ -705,7 +710,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             setPadding(8.dpToPx(resources), 0, 8.dpToPx(resources), 0)
             maxLines = 1
         }
-        recorderControls.addView(label, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+        recorderTimerLabel = label
+        recorderControls.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     private fun addRecorderButton(value: String, action: () -> Unit) {
