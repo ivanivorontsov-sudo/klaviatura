@@ -23,6 +23,7 @@ class VoiceSessionTest {
         val text = StringBuilder(); var comp = ""; val partials = ArrayList<String>()
         override fun partial(text: String) { comp = text; partials.add(text) }
         override fun commit(text: String) { comp = ""; if (this.text.isNotEmpty()) this.text.append(' '); this.text.append(text) }
+        override fun command(text: String) = false
     }
 
     @Test fun partialsReplaceAndOnlyFinalIsCommitted() {
@@ -75,5 +76,16 @@ class VoiceSessionTest {
         assertEquals("один ты", VoiceText.format("один ты ты ты ты", "ru", false))
         assertEquals("да да", VoiceText.format("да да", "ru", false))
         assertEquals("Привет, как дела?".lowercase(), VoiceText.format("привет запятая как дела вопросительный знак", "ru", true).lowercase())
+    }
+    @Test fun ordinalEditCommandFindsWord() {
+        val source = "один два три четыре"
+        val edit = ru.klaviatura.voice.VoiceEditCommands.parse(source, "исправь третье по счету слово на ВОСЕМЬ")!!
+        assertEquals("три", source.substring(edit.start, edit.end))
+    }
+
+    @Test fun rewriteCommandRequiresWholeField() {
+        assertEquals(null, ru.klaviatura.voice.VoiceEditCommands.parse("часть текста", "напиши заново Привет", false))
+        val edit = ru.klaviatura.voice.VoiceEditCommands.parse("Старый текст", "напиши заново Новый текст")!!
+        assertEquals("Новый текст", edit.replacement)
     }
 }
