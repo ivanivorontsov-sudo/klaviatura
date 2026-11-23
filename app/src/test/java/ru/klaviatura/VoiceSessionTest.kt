@@ -72,6 +72,50 @@ class VoiceSessionTest {
         assertEquals("воды много", VoiceText.format("воды много", "ru", false))
     }
 
+    @Test fun mixedModeChoosesRussianWhenEnglishModelHasHigherConfidence() {
+        val ed = Ed()
+        val english = Fake(listOf(listOf("yellow" to 0.99, "birds" to 0.98, "fly" to 0.97)))
+        val russian = Fake(listOf(listOf("я" to 0.72, "хочу" to 0.70, "говорить" to 0.69, "сегодня" to 0.68)))
+        val session = VoiceSession(listOf("ru" to russian, "en" to english), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("я хочу говорить сегодня", ed.text.toString())
+    }
+
+    @Test fun activeRussianLayoutWinsOverConfidentLatinNoiseWithoutLanguageWords() {
+        val ed = Ed()
+        val english = Fake(listOf(listOf("yellow" to 0.99, "birds" to 0.98, "flying" to 0.97)))
+        val russian = Fake(listOf(listOf("архипелаг" to 0.56, "исследуется" to 0.55)))
+        val session = VoiceSession(listOf("ru" to russian, "en" to english), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("архипелаг исследуется", ed.text.toString())
+    }
+
+    @Test fun mixedModeShowsPartialFromLanguageMatchingItsScript() {
+        val ed = Ed()
+        val english = Fake(listOf("yellow birds flying"))
+        val russian = Fake(listOf("я хочу говорить"))
+        val session = VoiceSession(listOf("ru" to russian, "en" to english), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("я хочу говорить", ed.comp)
+    }
+
+
+    @Test fun mixedModeCanSwitchToEnglishWhenItHasClearLanguageEvidence() {
+        val ed = Ed()
+        val russian = Fake(listOf(listOf("заработанный" to 0.99, "ветер" to 0.98, "летит" to 0.97)))
+        val english = Fake(listOf(listOf("hello" to 0.80, "my" to 0.79, "name" to 0.78, "is" to 0.77)))
+        val session = VoiceSession(listOf("ru" to russian, "en" to english), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("hello my name is", ed.text.toString())
+    }
+
+    @Test fun scriptCompatibilityScoresCyrillicAndLatinIndependently() {
+        assertEquals(1.0, VoiceText.scriptCompatibility("Привет мир", "ru"), 0.0)
+        assertEquals(1.0, VoiceText.scriptCompatibility("hello world", "en"), 0.0)
+        assertEquals(0.0, VoiceText.scriptCompatibility("Привет мир", "en"), 0.0)
+        assertEquals(0.0, VoiceText.scriptCompatibility("hello world", "ru"), 0.0)
+    }
+
     @Test fun repeatsCollapsed() {
         assertEquals("один ты", VoiceText.format("один ты ты ты ты", "ru", false))
         assertEquals("да да", VoiceText.format("да да", "ru", false))

@@ -31,7 +31,7 @@ object EmojiDefaultsMigration {
         return entries.joinToString(Separators.ENTRY)
     }
 
-    /** 1.4.0: clipboard, emoji and mic pinned on the suggestion strip (once; the user may unpin them later) */
+    /** 1.4.0: clipboard, emoji and speech-to-text mic pinned on the suggestion strip (once). The separate audio recorder stays in the expandable toolbar. */
     fun runPinned(prefs: SharedPreferences) {
         if (prefs.getBoolean(PREF_PINNED_DONE, false)) return
         val e = prefs.edit()
@@ -39,9 +39,14 @@ object EmojiDefaultsMigration {
         e.putBoolean(PREF_PINNED_DONE, true).apply()
     }
 
-    fun migratePinned(value: String, keys: List<String> = listOf("CLIPBOARD", "EMOJI", "VOICE", "VOICE_RECORDER")): String {
+    fun migratePinned(value: String, keys: List<String> = listOf("CLIPBOARD", "EMOJI", "VOICE")): String {
         val entries = value.split(Separators.ENTRY).filter { it.isNotBlank() }.toMutableList()
-        entries.removeAll { it.substringBefore(Separators.KV) in keys }
-        return (keys.map { it + Separators.KV + "true" } + entries).joinToString(Separators.ENTRY)
+        entries.removeAll {
+            val key = it.substringBefore(Separators.KV)
+            key in keys || key == "VOICE_RECORDER"
+        }
+        // Keep a false entry so older installations cannot repin the recorder during migration.
+        return (keys.map { it + Separators.KV + "true" } + ("VOICE_RECORDER" + Separators.KV + "false") + entries)
+            .joinToString(Separators.ENTRY)
     }
 }

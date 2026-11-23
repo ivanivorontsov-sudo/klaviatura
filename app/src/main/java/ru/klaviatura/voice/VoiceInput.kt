@@ -109,6 +109,7 @@ object VoiceInput {
     fun builtinEnabled(): Boolean = engine() == ENGINE_BUILTIN
     fun googleEnabled(): Boolean = engine() == ENGINE_GOOGLE
     private fun mixed() = ctx?.prefs()?.getBoolean(PREF_MIXED, false) ?: false
+    fun mixedEnabled(): Boolean = mixed()
 
     /** language of the active layout; voice always follows it */
     fun currentLang(): String = try {
@@ -151,6 +152,11 @@ object VoiceInput {
 
     fun start(t: VoiceTarget) {
         if (listening || starting) return
+        if (KeyboardAudioRecorder.state() == KeyboardAudioRecorder.State.RECORDING ||
+            KeyboardAudioRecorder.state() == KeyboardAudioRecorder.State.PAUSED) {
+            toast("Сначала завершите аудиозапись на панели клавиатуры")
+            return
+        }
         val c = ctx ?: return
         val lang = currentLang()
         if (!supported(lang)) { toast("Голос для языка «$lang» пока не поддерживается"); return }
