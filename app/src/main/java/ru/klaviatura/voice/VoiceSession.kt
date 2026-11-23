@@ -100,6 +100,7 @@ object VoiceText {
         // Merge only the unambiguous phrase «как и и»; ordinary «и и» remains untouched.
         words = mergeContextualInitialisms(words)
         words = repairVoiceInputTerms(words)
+        words = VoiceGlossary.normalize(words)
         words = words.map { ru.klaviatura.text.Yo.fix(ru.klaviatura.text.Profanity.mask(it)) }
         if (commands) words = punctuate(words, lang)
         words = capitalize(words)
