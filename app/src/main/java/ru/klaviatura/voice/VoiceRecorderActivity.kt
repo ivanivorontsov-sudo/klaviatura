@@ -14,46 +14,126 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlin.concurrent.thread
 
 /**
- * Small local recorder opened by long-pressing the keyboard microphone key.
- * Audio stays in app-private storage until the user explicitly shares it.
+ * Local voice tools: recorder, audio-file transcription, review/edit and explicit text insertion.
+ * Transcription never submits the active form or sends audio to a server.
  */
 class VoiceRecorderActivity : Activity() {
     private var recorder: MediaRecorder? = null
     private var player: MediaPlayer? = null
     private var output: File? = null
+    private var selectedAudio: Uri? = null
     private lateinit var status: TextView
     private lateinit var recordButton: Button
+    private lateinit var transcript: EditText
+    private lateinit var transcribeButton: Button
     private var recording = false
+    private var language = "ru"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "Диктофон клавиатуры"
+        VoiceInput.init(this)
+        language = VoiceInput.currentLang().takeIf { VoiceInput.supported(it) } ?: "ru"
+        title = "Голосовые инструменты"
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 24, 28, 24)
+            setPadding(24, 18, 24, 18)
             gravity = Gravity.CENTER_HORIZONTAL
         }
         status = TextView(this).apply {
-            text = "Запись хранится только на устройстве"
-            textSize = 16f
+            text = "Записи и расшифровка обрабатываются на устройстве"
+            textSize = 15f
             gravity = Gravity.CENTER
-            setPadding(0, 12, 0, 24)
+            setPadding(0, 8, 0, 14)
         }
         recordButton = Button(this).apply { text = "● Начать запись"; setOnClickListener { toggleRecording() } }
-        val play = Button(this).apply { text = "▶ Прослушать"; setOnClickListener { playRecording() } }
-        val share = Button(this).apply { text = "Вставить запись в чат…"; setOnClickListener { shareRecording() } }
+        val play = Button(this).apply { text = "▶ Прослушать запись"; setOnClickListener { playRecording() } }
+        val share = Button(this).apply { text = "Отправить аудиофайл…"; setOnClickListener { shareRecording() } }
+        val choose = Button(this).apply { text = "Выбрать аудиофайл…"; setOnClickListener { chooseAudio() } }
+        transcribeButton = Button(this).apply {
+            text = "Расшифровать локально"
+            isEnabled = false
+            setOnClickListener { transcribeSelected() }
+        }
+        transcript = EditText(this).apply {
+            hint = "Здесь появится текст. Проверьте и отредактируйте его перед вставкой."
+            minLines = 4
+            maxLines = 12
+            gravity = Gravity.TOP
+            textSize = 16f
+        }
+        val insert = Button(this).apply {
+            text = "Вставить текст в поле ввода"
+            setOnClickListener {
+                val value = transcript.text?.toString().orEmpty()
+                if (VoiceInput.commitImportedText(value)) {
+                    Toast.makeText(this@VoiceRecorderActivity, "Текст вставлен. Ничего не отправлено.", Toast.LENGTH_LONG).show()
+                    finish()
+                } else Toast.makeText(this@VoiceRecorderActivity, "Не удалось вставить: вернитесь в поле ввода и откройте диктофон с клавиатуры ещё раз", Toast.LENGTH_LONG).show()
+            }
+        }
         val close = Button(this).apply { text = "Закрыть"; setOnClickListener { finish() } }
-        listOf(status, recordButton, play, share, close).forEach { view ->
+        listOf(status, recordButton, play, share, choose, transcribeButton, transcript, insert, close).forEach { view ->
             root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         setContentView(root)
+    }
+
+    private fun chooseAudio() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/*"
+        }
+        startActivityForResult(intent, 42)
+    }
+
+    @Deprecated("Use Activity Result API")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 42) return
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        selectedAudio = uri
+        transcribeButton.isEnabled = true
+        status.text = "Файл выбран. Нажмите «Расшифровать локально»."
+        try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+    }
+
+    private fun transcribeSelected() {
+        val uri = selectedAudio ?: return
+        if (!VoiceInput.hasModel(language)) {
+            status.text = "Скачиваю офлайн-модель распознавания для $language. После загрузки нажмите ещё раз."
+            transcribeButton.isEnabled = false
+            VoiceInput.download(language)
+            transcribeButton.postDelayed({ transcribeButton.isEnabled = selectedAudio != null }, 1500)
+            return
+        }
+        transcribeButton.isEnabled = false
+        status.text = "Расшифровываю на устройстве… это может занять время"
+        thread(name = "kl-audio-transcribe") {
+            try {
+                val text = AudioFileTranscriber.transcribe(this, uri, VoiceInput.modelDir(language).absolutePath)
+                runOnUiThread {
+                    transcript.setText(VoiceText.format(text, language))
+                    status.text = if (text.isBlank()) "Речь не распознана. Попробуйте другой файл или модель." else "Готово. Проверьте текст — он пока никуда не вставлен."
+                    transcribeButton.isEnabled = true
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("KlVoice", "audio file transcription failed", e)
+                runOnUiThread {
+                    status.text = "Не удалось расшифровать: ${e.message ?: e.javaClass.simpleName}"
+                    transcribeButton.isEnabled = true
+                }
+            }
+        }
     }
 
     private fun toggleRecording() {
@@ -139,7 +219,7 @@ class VoiceRecorderActivity : Activity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(send, "Отправить аудиозапись"))
-            status.text = "Выберите чат или приложение для отправки файла"
+            status.text = "Выберите приложение для отправки аудиофайла"
         }.onFailure {
             Toast.makeText(this, "Не удалось подготовить аудиофайл: ${it.message}", Toast.LENGTH_LONG).show()
         }
