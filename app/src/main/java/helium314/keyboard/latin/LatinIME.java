@@ -1721,6 +1721,7 @@ public class LatinIME extends InputMethodService implements
     public void openVoiceRecorder() {
         try {
             ru.klaviatura.voice.VoiceInput.INSTANCE.setExternalTarget(mVoiceTarget);
+            ru.klaviatura.voice.VoiceInput.INSTANCE.prepareExternalInsert();
             startActivity(new android.content.Intent(this, ru.klaviatura.voice.VoiceRecorderActivity.class)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
