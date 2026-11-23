@@ -307,6 +307,7 @@ object VoiceInput {
                 }
             }
             override fun commit(text: String) {
+            override fun command(text: String): Boolean = voiceTarget.applyVoiceEdit(text)
                 val revision = outputRevision.get()
                 main.post {
                     if (sessionGeneration.get() == generation && outputRevision.get() == revision && listening)
