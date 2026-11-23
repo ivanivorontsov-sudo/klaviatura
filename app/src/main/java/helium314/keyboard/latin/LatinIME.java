@@ -700,7 +700,20 @@ public class LatinIME extends InputMethodService implements
                 final boolean wholeField = extracted.startOffset == 0;
                 final ru.klaviatura.voice.VoiceEditCommands.Edit edit =
                         ru.klaviatura.voice.VoiceEditCommands.INSTANCE.parse(current, command, wholeField);
-                if (edit == null) return false;
+                if (edit == null) {
+                    final String normalized = command.trim().toLowerCase(java.util.Locale.ROOT);
+                    final boolean explicitCommand = normalized.startsWith("исправь ")
+                            || normalized.startsWith("замени ") || normalized.startsWith("удали ")
+                            || normalized.startsWith("убери ") || normalized.startsWith("напиши заново")
+                            || normalized.startsWith("перепиши все") || normalized.startsWith("очисти ");
+                    if (explicitCommand) {
+                        android.widget.Toast.makeText(LatinIME.this,
+                                "Не удалось применить команду: проверьте номер слова или исходный фрагмент",
+                                android.widget.Toast.LENGTH_LONG).show();
+                        return true;
+                    }
+                    return false;
+                }
                 final int start = extracted.startOffset + edit.getStart();
                 final int end = extracted.startOffset + edit.getEnd();
                 ic.beginBatchEdit();
