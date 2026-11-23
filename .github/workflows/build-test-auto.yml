@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'app/src/main/java**'
+      - '.github/workflows/build-test-auto.yml'
   workflow_dispatch:
 
 jobs:
