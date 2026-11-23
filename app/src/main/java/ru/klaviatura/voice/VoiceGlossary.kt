@@ -38,6 +38,10 @@ object VoiceGlossary {
         }
     }
 
+    /** Keep known Latin-script acronyms even while recognizing Russian speech. */
+    fun isRecognizedTermToken(token: String): Boolean =
+        normalizeKey(token) in phraseMap || aliases.keys.any { it.equals(token, ignoreCase = true) }
+
     fun normalize(words: List<String>): List<String> {
         if (words.isEmpty()) return words
         val out = ArrayList<String>(words.size)
