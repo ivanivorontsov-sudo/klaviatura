@@ -122,7 +122,7 @@ class VoiceRecorderActivity : Activity() {
             try {
                 val text = AudioFileTranscriber.transcribe(this, uri, VoiceInput.modelDir(language).absolutePath)
                 runOnUiThread {
-                    transcript.setText(VoiceText.format(text, language))
+                    transcript.setText(VoiceText.format(text, language, commands = false))
                     status.text = if (text.isBlank()) "Речь не распознана. Попробуйте другой файл или модель." else "Готово. Проверьте текст — он пока никуда не вставлен."
                     transcribeButton.isEnabled = true
                 }
