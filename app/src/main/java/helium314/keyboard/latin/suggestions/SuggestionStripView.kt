@@ -214,6 +214,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             setupKey(button, colors)
             toolbar.addView(button)
         }
+        // Remove the dedicated recorder from the narrow suggestion row even when an older
+        // per-user toolbar preference still has it pinned (the shared migration may not have run).
+        if (ToolbarKey.VOICE_RECORDER in getPinnedToolbarKeys(context.prefs()))
+            removePinnedKey(context.prefs(), ToolbarKey.VOICE_RECORDER)
         for (pinnedKey in getPinnedToolbarKeys(context.prefs())) {
             val button = createToolbarKey(context, pinnedKey)
             button.layoutParams = toolbarKeyLayoutParams
