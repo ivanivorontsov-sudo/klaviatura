@@ -17,6 +17,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
@@ -86,7 +87,8 @@ class VoiceRecorderActivity : Activity() {
         listOf(status, recordButton, play, share, choose, transcribeButton, transcript, insert, close).forEach { view ->
             root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        setContentView(root)
+        val scroll = ScrollView(this).apply { addView(root) }
+        setContentView(scroll)
     }
 
     private fun chooseAudio() {
