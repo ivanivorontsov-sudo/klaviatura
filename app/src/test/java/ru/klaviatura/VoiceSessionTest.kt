@@ -72,6 +72,31 @@ class VoiceSessionTest {
         assertEquals("воды много", VoiceText.format("воды много", "ru", false))
     }
 
+    @Test fun mixedModeChoosesRussianWhenEnglishModelHasHigherConfidence() {
+        val ed = Ed()
+        val english = Fake(listOf(listOf("hello" to 0.99, "world" to 0.98)))
+        val russian = Fake(listOf(listOf("привет" to 0.72, "мир" to 0.70)))
+        val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("привет мир", ed.text.toString())
+    }
+
+    @Test fun mixedModeShowsPartialFromLanguageMatchingItsScript() {
+        val ed = Ed()
+        val english = Fake(listOf("hello world"))
+        val russian = Fake(listOf("привет мир"))
+        val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
+        session.feed(ShortArray(10), 10)
+        assertEquals("привет мир", ed.comp)
+    }
+
+    @Test fun scriptCompatibilityScoresCyrillicAndLatinIndependently() {
+        assertEquals(1.0, VoiceText.scriptCompatibility("Привет мир", "ru"), 0.0)
+        assertEquals(1.0, VoiceText.scriptCompatibility("hello world", "en"), 0.0)
+        assertEquals(0.0, VoiceText.scriptCompatibility("Привет мир", "en"), 0.0)
+        assertEquals(0.0, VoiceText.scriptCompatibility("hello world", "ru"), 0.0)
+    }
+
     @Test fun repeatsCollapsed() {
         assertEquals("один ты", VoiceText.format("один ты ты ты ты", "ru", false))
         assertEquals("да да", VoiceText.format("да да", "ru", false))
