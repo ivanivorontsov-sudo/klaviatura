@@ -66,7 +66,6 @@ object VoiceEditCommands {
             val prefix = Regex("(?i)^(?:исправь|замени)\\s+").find(spoken)?.value?.length ?: return null
             val split = spoken.indexOf(" на ", startIndex = prefix, ignoreCase = true)
             val old = if (split >= 0) spoken.substring(prefix, split).trim() else return null
-            val split = spoken.indexOf(" на ", ignoreCase = true)
             val replacement = if (split >= 0) spoken.substring(split + 4).trim().trimEnd('.', '!', '?', ',') else return null
             if (old.isEmpty() || replacement.isEmpty()) return null
             val at = lastIndexOfIgnoreCase(text, old)
