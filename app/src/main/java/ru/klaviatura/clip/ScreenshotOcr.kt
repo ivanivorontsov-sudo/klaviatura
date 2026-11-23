@@ -27,6 +27,11 @@ import java.util.concurrent.Executors
  * bounding boxes for every recognized line and word.
  */
 object ScreenshotOcr {
+    // hOCR word spans carry their own bounding box in the title attribute.
+    private val wordPattern = Regex(
+        """<span\\b(?=[^>]*\\bclass=['\"][^'\"]*\\bocrx_word\\b[^'\"]*['\"])(?=[^>]*\\btitle=['\"][^'\"]*\\bbbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+))[^>]*>(.*?)</span>""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
     private const val MAX_IMAGE_SIDE = 3600
     private const val MIN_MODEL_BYTES = 300_000L
     private val worker = Executors.newSingleThreadExecutor { r ->
