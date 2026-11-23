@@ -141,7 +141,7 @@ object GoogleVoice {
         recognizer = rec
         if (!target.beginSession()) { stopRecognizer(); return false }
         val main = Handler(Looper.getMainLooper())
-        @Volatile var activeLocale = localeTag(locale)
+        var activeLocale = localeTag(locale)
         rec.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
