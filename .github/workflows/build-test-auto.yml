@@ -1,5 +1,5 @@
 name: Test build
-# builds only for a single abi and does not produce an APK
+# validates tests and produces an installable debug APK
 
 on:
 # disabled on push: when I push to non-main, I do a PR anyway
@@ -34,6 +34,17 @@ jobs:
 
       - name: Build with Gradle
         run: ./gradlew :app:testDebugUnitTest --tests 'ru.klaviatura.*'
+
+      - name: Assemble debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaviatura-debug
+          path: app/build/outputs/apk/debug/*-debug*.apk
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Archive reports for failed job
         uses: actions/upload-artifact@v4
