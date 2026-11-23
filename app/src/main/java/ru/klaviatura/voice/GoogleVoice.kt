@@ -141,6 +141,7 @@ object GoogleVoice {
         recognizer = rec
         if (!target.beginSession()) { stopRecognizer(); return false }
         val main = Handler(Looper.getMainLooper())
+        @Volatile var activeLocale = localeTag(locale)
         rec.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
@@ -160,8 +161,8 @@ object GoogleVoice {
                 val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val raw = texts?.firstOrNull().orEmpty()
                 main.post {
-                    val normalized = VoiceText.format(raw, locale.substringBefore('-'), commands = true)
-                    val text = ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, locale)
+                    val normalized = VoiceText.format(raw, activeLocale.substringBefore('-'), commands = true)
+                    val text = ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, activeLocale)
                     if (text.isNotBlank()) target.commitPhrase(text)
                     target.endVoice()
                     stopRecognizer()
@@ -171,9 +172,15 @@ object GoogleVoice {
                 val texts = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val raw = texts?.firstOrNull().orEmpty()
                 if (raw.isNotBlank()) main.post {
-                    val normalized = VoiceText.format(raw, locale.substringBefore('-'), commands = false)
-                    target.showPartial(ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, locale))
+                    val normalized = VoiceText.format(raw, activeLocale.substringBefore('-'), commands = false)
+                    target.showPartial(ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, activeLocale))
                 }
+            }
+            override fun onLanguageDetection(results: Bundle?) {
+                if (Build.VERSION.SDK_INT < 34) return
+                val detected = results?.getString(SpeechRecognizer.DETECTED_LANGUAGE) ?: return
+                val base = detected.substringBefore('-').lowercase(Locale.US)
+                if (base in setOf("ru", "en")) activeLocale = detected
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
@@ -185,6 +192,19 @@ object GoogleVoice {
             // Android 13+ recognizers can use these contextual phrases to resolve technical terms.
             if (Build.VERSION.SDK_INT >= 33) {
                 putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, VoiceGlossary.biasingPhrases(context))
+            }
+            // Android 14+ can switch between downloaded language models during one utterance.
+            // Recognition services may ignore this request, so the fixed-locale path remains the fallback.
+            if (Build.VERSION.SDK_INT >= 34 && VoiceInput.mixedEnabled()) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,
+                    arrayListOf("ru-RU", "en-US")
+                )
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,
+                    arrayListOf("ru-RU", "en-US")
+                )
             }
             setPackage(PKG)
         }
