@@ -73,15 +73,40 @@ object ModelDownloader {
         var u = url
         repeat(maxRedirects) {
             val c = URL(u).openConnection() as HttpURLConnection
+            if (!u.startsWith("https://", ignoreCase = true))
+                throw IOException("небезопасный адрес загрузки: разрешён только HTTPS")
             c.instanceFollowRedirects = false
-            c.connectTimeout = 20000; c.readTimeout = 60000
-            c.setRequestProperty("User-Agent", "Klaviatura/1.2 (Android)")
+            c.connectTimeout = 25000
+            c.readTimeout = 90000
+            c.useCaches = false
+            c.setRequestProperty("User-Agent", "Klaviatura/1.5 Android")
+            c.setRequestProperty("Accept", "application/octet-stream,*/*")
+            c.setRequestProperty("Accept-Encoding", "identity")
             val code = c.responseCode
             if (code in 300..399) {
-                val loc = c.getHeaderField("Location") ?: throw IOException("редирект без адреса")
-                u = URL(URL(u), loc).toString(); c.disconnect(); return@repeat
+                val loc = c.getHeaderField("Location") ?: run {
+                    c.disconnect()
+                    throw IOException("сервер вернул редирект без адреса")
+                }
+                val next = URL(URL(u), loc).toString()
+                c.disconnect()
+                if (!next.startsWith("https://", ignoreCase = true))
+                    throw IOException("сервер попытался переключить загрузку на небезопасный HTTP")
+                u = next
+                return@repeat
             }
-            if (code !in 200..299) throw IOException("сервер ответил $code")
+            if (code !in 200..299) {
+                val retry = code == 408 || code == 425 || code == 429 || code in 500..599
+                val message = when (code) {
+                    401, 403 -> "доступ к файлу запрещён (HTTP $code)"
+                    404 -> "файл модели не найден (HTTP 404)"
+                    429 -> "сервер ограничил частоту загрузок (HTTP 429)"
+                    in 500..599 -> "сервер временно недоступен (HTTP $code)"
+                    else -> "сервер ответил HTTP $code"
+                }
+                c.disconnect()
+                throw IOException((if (retry) "временная ошибка: " else "") + message)
+            }
             return c
         }
         throw IOException("слишком много редиректов")
@@ -120,11 +145,16 @@ object ModelDownloader {
         throw IOException(errors.joinToString("; "))
     }
 
-    fun humanError(e: Exception): String = when (e) {
-        is java.net.UnknownHostException -> "нет интернета или сайт недоступен"
-        is java.net.SocketTimeoutException -> "сервер не отвечает"
-        is javax.net.ssl.SSLException -> "ошибка защищённого соединения"
-        else -> e.message ?: e.javaClass.simpleName
+    fun humanError(e: Exception): String {
+        val chain = generateSequence<Throwable>(e) { it.cause }.toList()
+        return when {
+            chain.any { it is java.net.UnknownHostException } -> "не удалось найти сервер: проверьте интернет или DNS"
+            chain.any { it is java.net.SocketTimeoutException } -> "сервер слишком долго не отвечает; попробуйте другую сеть"
+            chain.any { it is javax.net.ssl.SSLException } -> "ошибка TLS-соединения; проверьте дату, время и сертификаты устройства"
+            chain.any { it is java.net.ConnectException } -> "не удалось подключиться к серверу"
+            chain.any { it is java.io.FileNotFoundException } -> "сервер не нашёл файл модели"
+            else -> e.message ?: e.javaClass.simpleName
+        }
     }
 
     /** installs a model zip (from download or from a file the user picked); handles zips with or without top folder */
