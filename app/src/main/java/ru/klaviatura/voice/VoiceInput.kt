@@ -54,9 +54,23 @@ object VoiceInput {
     private val outputRevision = AtomicLong(0L)
     var onStateChanged: (() -> Unit)? = null
     @Volatile private var externalTarget: VoiceTarget? = null
+    @Volatile private var externalSessionStarted = false
 
     /** Keeps the IME editor bridge available to the recorder/transcription screen. */
-    fun setExternalTarget(target: VoiceTarget?) { externalTarget = target }
+    fun setExternalTarget(target: VoiceTarget?) { externalTarget = target; externalSessionStarted = false }
+
+    /** Capture the current chat/editor connection before the recorder activity takes focus. */
+    fun prepareExternalInsert(): Boolean {
+        val target = externalTarget ?: return false
+        externalSessionStarted = target.beginSession()
+        return externalSessionStarted
+    }
+
+    fun cancelExternalInsert() {
+        val target = externalTarget
+        if (externalSessionStarted) runCatching { target?.endVoice() }
+        externalSessionStarted = false
+    }
 
     /** Inserts reviewed transcription as text only; never sends or submits the host form. */
     fun commitImportedText(text: String): Boolean {
@@ -64,9 +78,10 @@ object VoiceInput {
         if (value.isEmpty()) return false
         val target = externalTarget ?: return false
         return try {
-            if (!target.beginSession()) return false
+            if (!externalSessionStarted && !target.beginSession()) return false
             target.commitPhrase(value)
             target.endVoice()
+            externalSessionStarted = false
             true
         } catch (e: Exception) {
             android.util.Log.e("KlVoice", "cannot insert imported transcript", e)
