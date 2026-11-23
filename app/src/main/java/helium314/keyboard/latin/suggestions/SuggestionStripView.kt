@@ -401,6 +401,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     override fun onClick(view: View) {
         val tag = view.tag
         if (tag is ToolbarKey) {
+            if (tag == ToolbarKey.VOICE_RECORDER) {
+                listener.openVoiceRecorder()
+                return
+            }
             onClickToolbarKey(view) { listener.onCodeInput(it, Constants.SUGGESTION_STRIP_COORDINATE, Constants.SUGGESTION_STRIP_COORDINATE, false) }
             return
         }
@@ -438,7 +442,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         val tag = view.tag as? ToolbarKey ?: return
         // A short tap starts/stops speech-to-text; a long press on the visible mic opens
         // the separate audio recorder so the user can share an actual audio file.
-        if (tag == ToolbarKey.VOICE
+        if ((tag == ToolbarKey.VOICE || tag == ToolbarKey.VOICE_RECORDER)
             && (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys)) {
             AudioAndHapticFeedbackManager.getInstance().performHapticFeedback(this, HapticEvent.KEY_LONG_PRESS)
             listener.openVoiceRecorder()
