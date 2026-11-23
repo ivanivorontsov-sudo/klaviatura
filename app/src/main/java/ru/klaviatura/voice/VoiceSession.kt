@@ -150,7 +150,7 @@ class VoiceSession(
 
     companion object {
         const val MIN_CONF = 0.45
-        private const val PRIMARY_LANGUAGE_BONUS = 0.12
+        private const val PRIMARY_LANGUAGE_BONUS = 0.20
     }
 }
 
