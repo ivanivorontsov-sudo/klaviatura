@@ -313,7 +313,11 @@ object VoiceInput {
                         voiceTarget.commitPhrase(text)
                 }
             }
-            override fun command(text: String): Boolean = voiceTarget.applyVoiceEdit(text)
+            override fun command(text: String): Boolean {
+                if (!VoiceEditCommands.looksLikeCommand(text)) return false
+                main.post { voiceTarget.applyVoiceEdit(text) }
+                return true
+            }
         }
         try {
             rec = openRecorder()
