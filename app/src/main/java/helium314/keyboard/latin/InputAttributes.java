@@ -103,11 +103,12 @@ public final class InputAttributes {
 
         mShouldInsertSpacesAutomatically = InputTypeUtils.isAutoSpaceFriendlyType(mInputType);
 
+        // This keyboard has its own built-in offline speech recognizer. Do not hide its
+        // microphone just because Android has no separate system/shortcut voice IME installed.
         final boolean noMicrophone = mIsPasswordField
                 || InputTypeUtils.isEmailVariation(variation)
                 || hasNoMicrophoneKeyOption()
-                || !RichInputMethodManager.isInitialized() // avoid crash when only using spell checker
-                || !RichInputMethodManager.getInstance().isShortcutImeReady();
+                || !RichInputMethodManager.isInitialized(); // avoid crash when only using spell checker
         mShouldShowVoiceInputKey = !noMicrophone;
 
         mDisableGestureFloatingPreviewText = InputAttributes.inPrivateImeOptions(
