@@ -151,6 +151,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         isGone = true
     }
     private val recorderUiHandler = Handler(Looper.getMainLooper())
+    private val recorderStateListener: (KeyboardAudioRecorder.State, java.io.File?, Long) -> Unit =
+        { state, file, elapsed -> post { renderInlineRecorder(state, file, elapsed) } }
     private val defaultVoiceStatusWidth = voiceStatusContainer.layoutParams.width
     private var inlineRecorderActive = false
     private var voiceStatusActive = false
@@ -410,9 +412,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        KeyboardAudioRecorder.onStateChanged = { state, file, elapsed ->
-            post { renderInlineRecorder(state, file, elapsed) }
-        }
+        KeyboardAudioRecorder.onStateChanged = recorderStateListener
         if (KeyboardAudioRecorder.state() != KeyboardAudioRecorder.State.IDLE) {
             renderInlineRecorder(KeyboardAudioRecorder.state(), KeyboardAudioRecorder.file(), KeyboardAudioRecorder.elapsedMs())
         }
@@ -421,7 +421,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         recorderUiHandler.removeCallbacks(recorderUiTicker)
-        KeyboardAudioRecorder.onStateChanged = null
+        if (KeyboardAudioRecorder.onStateChanged === recorderStateListener)
+            KeyboardAudioRecorder.onStateChanged = null
         dismissMoreSuggestionsPanel()
     }
 
