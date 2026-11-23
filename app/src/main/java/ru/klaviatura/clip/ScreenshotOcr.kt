@@ -236,5 +236,5 @@ object ScreenshotOcr {
 
     @Suppress("DEPRECATION")
     private fun htmlText(value: String): String =
-        Html.fromHtml(value).toString().replace('\\u00a0', ' ').trim()
+        Html.fromHtml(value).toString().replace('\u00A0', ' ').trim()
 }
