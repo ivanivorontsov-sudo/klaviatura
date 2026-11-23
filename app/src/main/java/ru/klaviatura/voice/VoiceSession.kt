@@ -93,7 +93,7 @@ object VoiceText {
     fun format(raw: String, lang: String, commands: Boolean): String {
         val cyr = lang in setOf("ru", "uk", "be", "bg", "sr")
         var words = raw.trim().split(Regex("\\s+")).filter { w ->
-            w.isNotEmpty() && w.all { ch -> !ch.isLetter() || (if (cyr) ch in '\u0400'..'\u04FF' else ch !in '\u0400'..'\u04FF') }
+            w.isNotEmpty() && (VoiceGlossary.isRecognizedTermToken(w) || w.all { ch -> !ch.isLetter() || (if (cyr) ch in '\u0400'..'\u04FF' else ch !in '\u0400'..'\u04FF') })
         }
         words = dedupe(words)
         // ASR often spells the spoken abbreviation «ИИ» as two separate conjunctions.
