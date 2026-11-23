@@ -25,6 +25,9 @@ import android.view.View.OnLongClickListener
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.os.Handler
+import android.os.Looper
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
@@ -58,6 +61,8 @@ import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
+import ru.klaviatura.voice.KeyboardAudioRecorder
+import ru.klaviatura.voice.VoiceRecorderActivity
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -133,7 +138,29 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         val pad = (4 * resources.displayMetrics.density).toInt()
         setPadding(pad, 0, pad, 0)
     }
+    private val recorderControls = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val recorderControlsScroll = HorizontalScrollView(context).apply {
+        isHorizontalScrollBarEnabled = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+        clipToPadding = false
+        addView(recorderControls, HorizontalScrollView.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+        isGone = true
+    }
+    private val recorderUiHandler = Handler(Looper.getMainLooper())
+    private val defaultVoiceStatusWidth = voiceStatusContainer.layoutParams.width
+    private var inlineRecorderActive = false
     private var voiceStatusActive = false
+    private val recorderUiTicker = object : Runnable {
+        override fun run() {
+            if (inlineRecorderActive && KeyboardAudioRecorder.state() == KeyboardAudioRecorder.State.RECORDING) {
+                renderInlineRecorder(KeyboardAudioRecorder.state(), KeyboardAudioRecorder.file(), KeyboardAudioRecorder.elapsedMs())
+                recorderUiHandler.postDelayed(this, 500L)
+            }
+        }
+    }
     private val toolbarExpandKey = findViewById<ImageButton>(R.id.suggestions_strip_toolbar_key)
     private val incognitoIcon = KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.INCOGNITO.name, context)
     private val toolbarArrowIcon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_TOOLBAR_KEY, context)
@@ -149,6 +176,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     init {
         voiceStatusContainer.addView(
             voiceStatusLabel,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        )
+        voiceStatusContainer.addView(
+            recorderControlsScroll,
             FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         )
         voiceStatusContainer.isGone = true
@@ -268,13 +299,13 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
      * the dictionary row when it is attached or dismissed.
      */
     private fun syncSuggestionAreaVisibility() {
-        val showRows = visibility == VISIBLE && !toolbarContainer.isVisible
+        val showRows = visibility == VISIBLE && !toolbarContainer.isVisible && !inlineRecorderActive
         suggestionsStrip.isVisible = showRows
         pinnedKeys.isVisible = showRows
         screenshotSuggestionContainer.isVisible =
             showRows && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
-        // Microphone status stays visible even when toolbar mode temporarily hides word rows.
-        voiceStatusContainer.isVisible = visibility == VISIBLE && voiceStatusActive
+        // Inline recording temporarily borrows the whole suggestion row for its transport controls.
+        voiceStatusContainer.isVisible = visibility == VISIBLE && (voiceStatusActive || inlineRecorderActive)
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
@@ -372,8 +403,20 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (view === this) syncSuggestionAreaVisibility()
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        KeyboardAudioRecorder.onStateChanged = { state, file, elapsed ->
+            post { renderInlineRecorder(state, file, elapsed) }
+        }
+        if (KeyboardAudioRecorder.state() != KeyboardAudioRecorder.State.IDLE) {
+            renderInlineRecorder(KeyboardAudioRecorder.state(), KeyboardAudioRecorder.file(), KeyboardAudioRecorder.elapsedMs())
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        recorderUiHandler.removeCallbacks(recorderUiTicker)
+        KeyboardAudioRecorder.onStateChanged = null
         dismissMoreSuggestionsPanel()
     }
 
@@ -442,10 +485,15 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         val tag = view.tag as? ToolbarKey ?: return
         // A short tap starts/stops speech-to-text; a long press on the visible mic opens
         // the separate audio recorder so the user can share an actual audio file.
-        if ((tag == ToolbarKey.VOICE || tag == ToolbarKey.VOICE_RECORDER)
-            && (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys)) {
+        if (tag == ToolbarKey.VOICE && (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys)) {
             AudioAndHapticFeedbackManager.getInstance().performHapticFeedback(this, HapticEvent.KEY_LONG_PRESS)
             listener.openVoiceRecorder()
+            return
+        }
+        if (tag == ToolbarKey.VOICE_RECORDER && (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys)) {
+            AudioAndHapticFeedbackManager.getInstance().performHapticFeedback(this, HapticEvent.KEY_LONG_PRESS)
+            setToolbarVisibility(false)
+            KeyboardAudioRecorder.start(context)
             return
         }
         if (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys) {
@@ -579,6 +627,107 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             if (parent is ViewGroup) {
                 parent.removeView(debugInfoView)
             }
+        }
+    }
+
+    private fun renderInlineRecorder(state: KeyboardAudioRecorder.State, file: java.io.File?, elapsedMs: Long) {
+        inlineRecorderActive = state != KeyboardAudioRecorder.State.IDLE
+        recorderUiHandler.removeCallbacks(recorderUiTicker)
+        val params = voiceStatusContainer.layoutParams as? LinearLayout.LayoutParams
+        if (params != null) {
+            params.width = if (inlineRecorderActive) 0 else defaultVoiceStatusWidth
+            params.weight = if (inlineRecorderActive) 1f else 0f
+            voiceStatusContainer.layoutParams = params
+        }
+        voiceStatusLabel.isGone = inlineRecorderActive
+        recorderControlsScroll.isVisible = inlineRecorderActive
+        recorderControls.removeAllViews()
+
+        if (inlineRecorderActive) {
+            val minutes = elapsedMs / 60_000
+            val seconds = (elapsedMs / 1_000) % 60
+            val timer = when (state) {
+                KeyboardAudioRecorder.State.RECORDING -> "● %02d:%02d".format(minutes, seconds)
+                KeyboardAudioRecorder.State.PAUSED -> "Ⅱ %02d:%02d".format(minutes, seconds)
+                KeyboardAudioRecorder.State.SAVED -> "✓ Запись готова"
+                KeyboardAudioRecorder.State.IDLE -> ""
+            }
+            addRecorderLabel(timer)
+            when (state) {
+                KeyboardAudioRecorder.State.RECORDING -> {
+                    addRecorderButton("Пауза") { KeyboardAudioRecorder.pauseOrResume() }
+                    addRecorderButton("Готово") { KeyboardAudioRecorder.stop() }
+                    addRecorderButton("Отмена") { KeyboardAudioRecorder.cancel() }
+                }
+                KeyboardAudioRecorder.State.PAUSED -> {
+                    addRecorderButton("Продолжить") { KeyboardAudioRecorder.pauseOrResume() }
+                    addRecorderButton("Готово") { KeyboardAudioRecorder.stop() }
+                    addRecorderButton("Отмена") { KeyboardAudioRecorder.cancel() }
+                }
+                KeyboardAudioRecorder.State.SAVED -> {
+                    addRecorderButton("Обрезать") { openRecorderTrim(file) }
+                    addRecorderButton("Отправить") { KeyboardAudioRecorder.share(context) }
+                    addRecorderButton("Удалить") { KeyboardAudioRecorder.deleteCurrent() }
+                    addRecorderButton("Закрыть") { KeyboardAudioRecorder.dismissUi() }
+                }
+                KeyboardAudioRecorder.State.IDLE -> Unit
+            }
+            if (state == KeyboardAudioRecorder.State.RECORDING) recorderUiHandler.postDelayed(recorderUiTicker, 500L)
+        }
+
+        syncSuggestionAreaVisibility()
+        recorderControlsScroll.post { if (inlineRecorderActive) recorderControlsScroll.fullScroll(View.FOCUS_RIGHT) }
+    }
+
+    private fun addRecorderLabel(value: String) {
+        val label = TextView(context).apply {
+            text = value
+            gravity = Gravity.CENTER
+            setTextColor(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            textSize = 12f
+            setPadding(8.dpToPx(resources), 0, 8.dpToPx(resources), 0)
+            maxLines = 1
+        }
+        recorderControls.addView(label, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+    }
+
+    private fun addRecorderButton(value: String, action: () -> Unit) {
+        val density = resources.displayMetrics.density
+        val button = TextView(context).apply {
+            text = value
+            gravity = Gravity.CENTER
+            setTextColor(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            textSize = 12f
+            minWidth = (58 * density).toInt()
+            setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
+            background = GradientDrawable().apply {
+                setColor(Settings.getValues().mColors.get(ColorType.KEY_BACKGROUND))
+                cornerRadius = 7 * density
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(
+                    KeyCode.NOT_SPECIFIED, this, HapticEvent.KEY_PRESS
+                )
+                action()
+            }
+        }
+        val lp = LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
+        lp.setMargins((2 * density).toInt(), (3 * density).toInt(), (2 * density).toInt(), (3 * density).toInt())
+        recorderControls.addView(button, lp)
+    }
+
+    private fun openRecorderTrim(file: java.io.File?) {
+        val target = file?.takeIf { it.isFile } ?: KeyboardAudioRecorder.file() ?: return
+        runCatching {
+            context.startActivity(
+                android.content.Intent(context, VoiceRecorderActivity::class.java)
+                    .putExtra(VoiceRecorderActivity.EXTRA_TRIM_FILE, target.absolutePath)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            android.util.Log.e("KlVoice", "cannot open audio trim screen", it)
         }
     }
 
