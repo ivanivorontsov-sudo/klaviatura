@@ -71,7 +71,7 @@ object ModelDownloader {
     /** follows redirects manually (HttpURLConnection does not follow cross-host / protocol redirects reliably) */
     fun open(url: String, maxRedirects: Int = 8): HttpURLConnection {
         var u = url
-        repeat(maxRedirects) {
+        repeat(maxRedirects + 1) {
             val c = URL(u).openConnection() as HttpURLConnection
             if (!u.startsWith("https://", ignoreCase = true))
                 throw IOException("небезопасный адрес загрузки: разрешён только HTTPS")
