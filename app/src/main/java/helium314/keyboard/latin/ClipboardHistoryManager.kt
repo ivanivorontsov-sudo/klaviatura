@@ -322,7 +322,8 @@ class ClipboardHistoryManager(
                     entry.timeStamp > legacyDismissedTimestamp &&
                     now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
-            ?.maxByOrNull { it.timeStamp }
+            // Newest capture first; database IDs break same-millisecond timestamp ties.
+            ?.maxWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
     }
 
     private fun recentImageSuggestionView(
