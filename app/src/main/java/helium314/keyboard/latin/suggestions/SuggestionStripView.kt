@@ -147,7 +147,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         clipToPadding = false
-        addView(recorderControls, HorizontalScrollView.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+        addView(recorderControls, FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
         isGone = true
     }
     private val recorderUiHandler = Handler(Looper.getMainLooper())
