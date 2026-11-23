@@ -1720,6 +1720,7 @@ public class LatinIME extends InputMethodService implements
     /** Opens the built-in local audio recorder from the microphone key's long-press menu. */
     public void openVoiceRecorder() {
         try {
+            ru.klaviatura.voice.VoiceInput.INSTANCE.setExternalTarget(mVoiceTarget);
             startActivity(new android.content.Intent(this, ru.klaviatura.voice.VoiceRecorderActivity.class)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
