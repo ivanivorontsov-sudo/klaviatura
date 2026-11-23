@@ -9,47 +9,72 @@ import android.net.Uri
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import java.io.ByteArrayOutputStream
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 /**
  * Decodes common Android audio formats with MediaCodec, downmixes to mono 16 kHz PCM,
- * then transcribes locally with the already-supported Vosk runtime.
- * No audio bytes are uploaded or copied to public storage.
+ * then transcribes locally with the existing Vosk runtime.
+ *
+ * Both source and PCM are temporary cache files. Audio is never uploaded or copied to public storage.
+ * PCM is streamed to Vosk in chunks to avoid holding long recordings in RAM.
  */
 object AudioFileTranscriber {
     private const val TARGET_RATE = 16_000
+    private const val MAX_SOURCE_BYTES = 1024L * 1024L * 1024L
 
     fun transcribe(context: Context, uri: Uri, modelDirectory: String): String {
-        val pcm = decodeToPcm16(context, uri)
-        require(pcm.isNotEmpty()) { "В аудиофайле не найден звук" }
-        val model = Model(modelDirectory)
-        val recognizer = Recognizer(model, TARGET_RATE.toFloat())
-        return try {
-            val chunk = 64 * 1024
-            var offset = 0
-            while (offset < pcm.size) {
-                val count = minOf(chunk, pcm.size - offset)
-                recognizer.acceptWaveForm(pcm.copyOfRange(offset, offset + count), count)
-                offset += count
+        val source = File.createTempFile("kl-audio-source-", ".bin", context.cacheDir)
+        val pcm = File.createTempFile("kl-audio-pcm-", ".raw", context.cacheDir)
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(source).use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= MAX_SOURCE_BYTES) { "Файл больше 1 ГБ — выберите более короткую запись" }
+                        output.write(buffer, 0, count)
+                    }
+                }
+            } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл")
+            decodeToPcm16(source, pcm)
+            require(pcm.length() > 0L) { "В аудиофайле не найден звук" }
+
+            val model = Model(modelDirectory)
+            val recognizer = Recognizer(model, TARGET_RATE.toFloat())
+            return try {
+                BufferedInputStream(FileInputStream(pcm)).use { input ->
+                    val chunk = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(chunk)
+                        if (count < 0) break
+                        recognizer.acceptWaveForm(chunk, count)
+                    }
+                }
+                JSONObject(recognizer.finalResult).optString("text").trim()
+            } finally {
+                recognizer.close()
+                model.close()
             }
-            JSONObject(recognizer.finalResult).optString("text").trim()
         } finally {
-            recognizer.close()
-            model.close()
+            source.delete()
+            pcm.delete()
         }
     }
 
-    private fun decodeToPcm16(context: Context, uri: Uri): ByteArray {
+    private fun decodeToPcm16(source: File, destination: File) {
         val extractor = MediaExtractor()
-        val pcmOut = ByteArrayOutputStream()
         var codec: MediaCodec? = null
         try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
-                extractor.setDataSource(fd.fileDescriptor)
-            } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл")
+            extractor.setDataSource(source.absolutePath)
             var track = -1
             var format: MediaFormat? = null
             for (i in 0 until extractor.trackCount) {
@@ -70,39 +95,42 @@ object AudioFileTranscriber {
             var channels = format!!.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             var pcmEncoding = android.media.AudioFormat.ENCODING_PCM_16BIT
 
-            while (!outputDone) {
-                if (!inputDone) {
-                    val inputIndex = codec.dequeueInputBuffer(10_000)
-                    if (inputIndex >= 0) {
-                        val input = codec.getInputBuffer(inputIndex)!!
-                        val size = extractor.readSampleData(input, 0)
-                        if (size < 0) {
-                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            codec.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
-                            extractor.advance()
+            FileOutputStream(destination).buffered().use { pcmOut ->
+                while (!outputDone) {
+                    if (!inputDone) {
+                        val inputIndex = codec.dequeueInputBuffer(10_000)
+                        if (inputIndex >= 0) {
+                            val input = codec.getInputBuffer(inputIndex)!!
+                            input.clear()
+                            val size = extractor.readSampleData(input, 0)
+                            if (size < 0) {
+                                codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                codec.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
+                                extractor.advance()
+                            }
                         }
                     }
-                }
-                val outputIndex = codec.dequeueOutputBuffer(info, 10_000)
-                when {
-                    outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        val outFormat = codec.outputFormat
-                        sampleRate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                        channels = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        if (outFormat.containsKey(MediaFormat.KEY_PCM_ENCODING))
-                            pcmEncoding = outFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
-                    }
-                    outputIndex >= 0 -> {
-                        val buffer = codec.getOutputBuffer(outputIndex)
-                        if (buffer != null && info.size > 0) {
-                            buffer.position(info.offset)
-                            buffer.limit(info.offset + info.size)
-                            appendResampledMono(buffer.slice().order(ByteOrder.LITTLE_ENDIAN), pcmOut, sampleRate, channels, pcmEncoding)
+                    val outputIndex = codec.dequeueOutputBuffer(info, 10_000)
+                    when {
+                        outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            val outFormat = codec.outputFormat
+                            sampleRate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                            channels = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                            if (outFormat.containsKey("pcm-encoding"))
+                                pcmEncoding = outFormat.getInteger("pcm-encoding")
                         }
-                        outputDone = (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
-                        codec.releaseOutputBuffer(outputIndex, false)
+                        outputIndex >= 0 -> {
+                            val buffer = codec.getOutputBuffer(outputIndex)
+                            if (buffer != null && info.size > 0) {
+                                buffer.position(info.offset)
+                                buffer.limit(info.offset + info.size)
+                                appendResampledMono(buffer.slice().order(ByteOrder.LITTLE_ENDIAN), pcmOut, sampleRate, channels, pcmEncoding)
+                            }
+                            outputDone = (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+                            codec.releaseOutputBuffer(outputIndex, false)
+                        }
                     }
                 }
             }
@@ -111,12 +139,11 @@ object AudioFileTranscriber {
             runCatching { codec?.release() }
             extractor.release()
         }
-        return pcmOut.toByteArray()
     }
 
     private fun appendResampledMono(
         source: ByteBuffer,
-        output: ByteArrayOutputStream,
+        output: java.io.OutputStream,
         sourceRate: Int,
         channels: Int,
         encoding: Int
