@@ -21,7 +21,7 @@ object VoiceEditCommands {
     )
 
     fun looksLikeCommand(spoken: String): Boolean {
-        val value = spoken.trim().trimStart(' ', '\\t').lowercase(Locale.ROOT).replace('ё', 'е')
+        val value = spoken.trim().lowercase(Locale.ROOT).replace('ё', 'е')
         return listOf("исправь ", "замени ", "удали ", "убери ", "напиши заново", "перепиши все", "очисти ")
             .any { value.startsWith(it) }
     }
