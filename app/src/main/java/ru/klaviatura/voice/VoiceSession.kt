@@ -52,8 +52,9 @@ class VoiceSession(
             if (raw.isBlank()) null else {
                 val language = lang.substringBefore('-')
                 val scriptFit = VoiceText.scriptCompatibility(raw, language)
-                val preference = if (lang == asrs.firstOrNull()?.first) 0.015 else 0.0
-                Triple(lang, raw, scriptFit * 0.8 + preference)
+                val lexicalFit = VoiceText.languageEvidence(raw, language)
+                val preference = if (lang == asrs.firstOrNull()?.first) PRIMARY_LANGUAGE_BONUS else 0.0
+                Triple(lang, raw, scriptFit * 0.18 + lexicalFit * 0.72 + preference)
             }
         }.maxByOrNull { it.third }
 
@@ -118,8 +119,12 @@ class VoiceSession(
             val language = lang.substringBefore('-')
             val averageConfidence = retainedConfidence / retainedCount
             val scriptFit = VoiceText.scriptCompatibility(raw, language)
-            val primaryPreference = if (lang == asrs.firstOrNull()?.first) 0.015 else 0.0
-            val score = averageConfidence + (scriptFit - 0.5) * SCRIPT_WEIGHT + primaryPreference
+            val lexicalFit = VoiceText.languageEvidence(raw, language)
+            val primaryPreference = if (lang == asrs.firstOrNull()?.first) PRIMARY_LANGUAGE_BONUS else 0.0
+            // A recognizer's confidence is not comparable with another model's confidence.
+            // Prefer words that actually look like the selected language, while keeping the
+            // active keyboard layout as a conservative prior for short/ambiguous utterances.
+            val score = averageConfidence * 0.42 + scriptFit * 0.18 + lexicalFit * 0.40 + primaryPreference
             val candidate = Candidate(resultWords, lang, score)
             if (best == null || candidate.score > best!!.score) best = candidate
         }
@@ -145,7 +150,7 @@ class VoiceSession(
 
     companion object {
         const val MIN_CONF = 0.45
-        private const val SCRIPT_WEIGHT = 0.75
+        private const val PRIMARY_LANGUAGE_BONUS = 0.12
     }
 }
 
@@ -165,6 +170,47 @@ object VoiceText {
         }
         return matching.toDouble() / letters.length
     }
+
+    /** Lightweight vocabulary evidence to reject confident cross-language hallucinations. */
+    fun languageEvidence(raw: String, language: String): Double {
+        val tokens = Regex("[\\p{L}]+").findAll(raw.lowercase()).map { it.value }.toList()
+        if (tokens.isEmpty()) return 0.0
+        val vocabulary = when (language.substringBefore('-').lowercase()) {
+            "ru" -> RUSSIAN_VOICE_WORDS
+            "en" -> ENGLISH_VOICE_WORDS
+            else -> emptySet()
+        }
+        if (vocabulary.isEmpty()) return 0.0
+        val hits = tokens.count { it in vocabulary }
+        val ratio = hits.toDouble() / tokens.size
+        return (ratio * 0.65 + minOf(hits, 3) * 0.12).coerceIn(0.0, 1.0)
+    }
+
+    private val RUSSIAN_VOICE_WORDS = setOf(
+        "я", "мы", "ты", "вы", "он", "она", "они", "мне", "меня", "мой", "моя",
+        "и", "а", "но", "в", "во", "на", "не", "что", "это", "как", "с", "со",
+        "к", "по", "за", "для", "от", "до", "если", "чтобы", "потому", "уже",
+        "сейчас", "там", "тут", "здесь", "есть", "был", "будет", "хочу", "надо",
+        "нужно", "можно", "привет", "здравствуйте", "да", "нет", "пожалуйста",
+        "спасибо", "доброе", "утро", "вечер", "сегодня", "завтра", "может",
+        "действительно", "друг", "имя", "говорить", "люблю", "нравится",
+        "тест", "клавиатура", "голос", "запись", "отправить", "файл",
+        "открыть", "закрыть", "начать", "продолжить", "остановить"
+    )
+
+    private val ENGLISH_VOICE_WORDS = setOf(
+        "i", "we", "you", "he", "she", "they", "me", "my", "mine", "your", "our",
+        "the", "a", "an", "and", "or", "but", "if", "that", "this", "it", "is",
+        "are", "was", "were", "be", "to", "of", "in", "on", "for", "with", "as",
+        "at", "by", "from", "have", "has", "had", "do", "does", "did", "not",
+        "what", "how", "when", "where", "why", "can", "could", "will", "would",
+        "should", "there", "here", "now", "just", "about", "so", "than", "into",
+        "after", "before", "hello", "hi", "yes", "no", "please", "thanks", "thank",
+        "good", "morning", "evening", "name", "friend", "today", "tomorrow",
+        "maybe", "really", "want", "need", "like", "love", "test", "keyboard",
+        "voice", "record", "send", "file", "open", "close", "stop", "start",
+        "continue", "speak", "speaking"
+    )
     private val NUM = setOf("ноль","один","одна","два","две","три","четыре","пять","шесть","семь","восемь","девять","десять")
     /** Zipformer writes «один-два три-четыре»: split hyphens only between number words */
     fun dehyphenNumbers(t: String) = t.replace(Regex("(\\p{L}+)-(\\p{L}+)")) { m ->
