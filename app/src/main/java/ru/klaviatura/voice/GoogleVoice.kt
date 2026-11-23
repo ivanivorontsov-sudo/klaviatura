@@ -181,7 +181,11 @@ object GoogleVoice {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag(locale))
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            // Android 13+ recognizers can use these contextual phrases to resolve technical terms.
+            if (Build.VERSION.SDK_INT >= 33) {
+                putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, VoiceGlossary.biasingPhrases(context))
+            }
             setPackage(PKG)
         }
         return try { rec.startListening(intent); true } catch (e: Exception) {
