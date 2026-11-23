@@ -76,9 +76,10 @@ class VoiceSession(
         if (words == null) { if (lastPartial.isNotEmpty()) { lastPartial = ""; out.partial("") }; return false }
         lastSpeechAt = System.currentTimeMillis()
         var text = VoiceText.format(words.joinToString(" "), bestLang.substringBefore('-'), commands)
-        if (codeMode) text = ru.klaviatura.code.CodeVoice.rewrite(text, bestLang.substringBefore('-'))
         lastPartial = ""
-        if (text.isNotEmpty()) { if (!commands || !out.command(text)) out.commit(text) } else out.partial("")
+        if (text.isNotEmpty() && commands && out.command(text)) return true
+        if (codeMode) text = ru.klaviatura.code.CodeVoice.rewrite(text, bestLang.substringBefore('-'))
+        if (text.isNotEmpty()) out.commit(text) else out.partial("")
         return true
     }
 
