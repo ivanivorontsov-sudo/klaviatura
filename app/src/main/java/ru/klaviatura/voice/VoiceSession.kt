@@ -161,7 +161,7 @@ object VoiceText {
         val baseLanguage = language.substringBefore('-').lowercase()
         val cyrillicLanguage = baseLanguage in setOf("ru", "uk", "be", "bg", "sr", "mk", "kk", "ky")
         val matching = letters.count { ch ->
-            if (cyrillicLanguage) ch in '\\u0400'..'\\u04FF' else ch in 'A'..'Z' || ch in 'a'..'z'
+            if (cyrillicLanguage) ch.code in 0x0400..0x04FF else ch in 'A'..'Z' || ch in 'a'..'z'
         }
         return matching.toDouble() / letters.length
     }
