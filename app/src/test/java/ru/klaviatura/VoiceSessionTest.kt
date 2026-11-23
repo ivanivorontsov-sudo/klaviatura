@@ -78,7 +78,7 @@ class VoiceSessionTest {
         val russian = Fake(listOf(listOf("я" to 0.72, "хочу" to 0.70, "говорить" to 0.69, "сегодня" to 0.68)))
         val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
         session.feed(ShortArray(10), 10)
-        assertEquals("привет мир", ed.text.toString())
+        assertEquals("я хочу говорить сегодня", ed.text.toString())
     }
 
     @Test fun mixedModeShowsPartialFromLanguageMatchingItsScript() {
@@ -87,7 +87,7 @@ class VoiceSessionTest {
         val russian = Fake(listOf("я хочу говорить"))
         val session = VoiceSession(listOf("en" to english, "ru" to russian), ed)
         session.feed(ShortArray(10), 10)
-        assertEquals("привет мир", ed.comp)
+        assertEquals("я хочу говорить", ed.comp)
     }
 
 
