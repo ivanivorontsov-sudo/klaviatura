@@ -176,9 +176,9 @@ object GoogleVoice {
                     target.showPartial(ru.klaviatura.code.CodeVoice.maybeRewrite(normalized, activeLocale))
                 }
             }
-            override fun onLanguageDetection(results: Bundle?) {
+            override fun onLanguageDetection(results: Bundle) {
                 if (Build.VERSION.SDK_INT < 34) return
-                val detected = results?.getString(SpeechRecognizer.DETECTED_LANGUAGE) ?: return
+                val detected = results.getString(SpeechRecognizer.DETECTED_LANGUAGE) ?: return
                 val base = detected.substringBefore('-').lowercase(Locale.US)
                 if (base in setOf("ru", "en")) activeLocale = detected
             }
