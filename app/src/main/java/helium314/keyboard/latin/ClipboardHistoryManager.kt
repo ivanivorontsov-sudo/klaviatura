@@ -435,7 +435,7 @@ class ClipboardHistoryManager(
                 ?: return@runCatching
             dialog.window?.let { dialogWindow ->
                 val params = dialogWindow.attributes
-                params.type = WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG
+                params.type = WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG
                 params.token = token
                 dialogWindow.attributes = params
             }
