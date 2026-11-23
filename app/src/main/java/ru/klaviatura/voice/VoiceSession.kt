@@ -16,6 +16,8 @@ interface Asr {
 interface VoiceOutput {
     fun partial(text: String)
     fun commit(text: String)
+    /** Handle an explicit edit command instead of inserting it as dictated text. */
+    fun command(text: String): Boolean
 }
 
 /**
@@ -76,7 +78,7 @@ class VoiceSession(
         var text = VoiceText.format(words.joinToString(" "), bestLang.substringBefore('-'), commands)
         if (codeMode) text = ru.klaviatura.code.CodeVoice.rewrite(text, bestLang.substringBefore('-'))
         lastPartial = ""
-        if (text.isNotEmpty()) out.commit(text) else out.partial("")
+        if (text.isNotEmpty()) { if (!commands || !out.command(text)) out.commit(text) } else out.partial("")
         return true
     }
 
