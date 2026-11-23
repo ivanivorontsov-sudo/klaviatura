@@ -30,8 +30,8 @@ android {
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 37
-        versionName = "1.5.15"
+        versionCode = 38
+        versionName = "1.5.16"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))
@@ -155,6 +155,9 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     // androidx
     implementation("androidx.core:core-ktx:1.17.0") // 1.18.0 requires minSdk 23
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
+    // Offline OCR with Russian + English layout/word bounding boxes (Apache-2.0).
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.autofill:autofill:1.3.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")

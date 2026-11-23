@@ -34,15 +34,6 @@ object ScreenshotOcr {
     }
     private val main = Handler(Looper.getMainLooper())
 
-    private val linePattern = Regex(
-        """<span\b(?=[^>]*\bclass=['"][^'"]*\bocr_line\b[^'"]*['"])(?=[^>]*\btitle=['"][^'"]*bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
-        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-    )
-    private val wordPattern = Regex(
-        """<span\b(?=[^>]*\bclass=['"][^'"]*\bocrx_word\b[^'"]*['"])(?=[^>]*\btitle=['"][^'"]*bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
-        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-    )
-
     fun recognize(context: Context, imageFile: File, callback: (text: String?, error: String?) -> Unit) {
         worker.execute {
             try {
@@ -70,7 +61,7 @@ object ScreenshotOcr {
                 throw IOException("Tesseract не смог загрузить русскую и английскую модели")
             api.setVariable("preserve_interword_spaces", "1")
             api.setImage(bitmap)
-            val plain = api.UTF8Text.orEmpty().trim()
+            val plain = api.getUTF8Text().orEmpty().trim()
             val hocr = api.getHOCRText(0).orEmpty()
             if (plain.isBlank() && hocr.isBlank()) throw IOException("на изображении не найден читаемый текст")
             return formatResult(plain, hocr, bitmap.width, bitmap.height)
@@ -150,26 +141,46 @@ object ScreenshotOcr {
     )
 
     private fun formatResult(plain: String, hocr: String, width: Int, height: Int): String {
-        val lines = linePattern.findAll(hocr).mapNotNull { match ->
+        val recognizedWords = wordPattern.findAll(hocr).mapNotNull { match ->
             val left = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
             val top = match.groupValues[2].toIntOrNull() ?: return@mapNotNull null
             val right = match.groupValues[3].toIntOrNull() ?: return@mapNotNull null
             val bottom = match.groupValues[4].toIntOrNull() ?: return@mapNotNull null
-            val raw = match.groupValues[5]
-            val words = wordPattern.findAll(raw).mapNotNull { wordMatch ->
-                val x1 = wordMatch.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val y1 = wordMatch.groupValues[2].toIntOrNull() ?: return@mapNotNull null
-                val x2 = wordMatch.groupValues[3].toIntOrNull() ?: return@mapNotNull null
-                val y2 = wordMatch.groupValues[4].toIntOrNull() ?: return@mapNotNull null
-                val wordText = htmlText(wordMatch.groupValues[5])
-                if (wordText.isBlank()) return@mapNotNull null
-                val confidence = Regex("""x_wconf\s+(\d+)""").find(wordMatch.value)
-                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
-                Word(wordText, x1, y1, x2, y2, confidence)
-            }.toList()
-            val lineText = words.joinToString(" ") { it.text }.ifBlank { htmlText(raw) }
-            if (lineText.isBlank()) null else Line(lineText, left, top, right, bottom, words)
+            val wordText = htmlText(match.groupValues[5])
+            if (wordText.isBlank()) return@mapNotNull null
+            val confidence = Regex("""x_wconf\s+(\d+)""").find(match.value)
+                ?.groupValues?.getOrNull(1)?.toIntOrNull()
+            Word(wordText, left, top, right, bottom, confidence)
         }.toList()
+
+        // hOCR exposes individual word boxes. Group neighbouring words by their vertical
+        // centres instead of parsing nested HTML spans (which can truncate a line at word 1).
+        val wordLines = mutableListOf<MutableList<Word>>()
+        recognizedWords.forEach { word ->
+            val current = wordLines.lastOrNull()
+            val wordHeight = (word.bottom - word.top).coerceAtLeast(1)
+            val currentCenter = current?.map { (it.top + it.bottom) / 2.0 }?.average()
+            val currentHeight = current?.map { (it.bottom - it.top).coerceAtLeast(1) }?.sorted()
+                ?.let { it[it.size / 2] }
+            val wordCenter = (word.top + word.bottom) / 2.0
+            val tolerance = maxOf(4.0, ((currentHeight ?: wordHeight) + wordHeight) * 0.30)
+            if (current != null && currentCenter != null && kotlin.math.abs(wordCenter - currentCenter) <= tolerance) {
+                current.add(word)
+            } else {
+                wordLines.add(mutableListOf(word))
+            }
+        }
+        val lines = wordLines.map { row ->
+            val ordered = row.sortedBy { it.left }
+            Line(
+                ordered.joinToString(" ") { it.text },
+                ordered.minOf { it.left },
+                ordered.minOf { it.top },
+                ordered.maxOf { it.right },
+                ordered.maxOf { it.bottom },
+                ordered
+            )
+        }
 
         val readable = if (lines.isNotEmpty()) {
             val medianHeight = lines.map { (it.bottom - it.top).coerceAtLeast(1) }.sorted()
@@ -225,6 +236,5 @@ object ScreenshotOcr {
 
     @Suppress("DEPRECATION")
     private fun htmlText(value: String): String =
-        Html.fromHtml(value.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\\n"),
-            Html.FROM_HTML_MODE_LEGACY).toString().replace('\\u00a0', ' ').trim()
+        Html.fromHtml(value).toString().replace('\\u00a0', ' ').trim()
 }

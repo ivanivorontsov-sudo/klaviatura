@@ -10,6 +10,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.text.TextUtils
+import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -37,6 +38,7 @@ import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ClipboardHistoryManager(
         private val latinIME: LatinIME
@@ -46,6 +48,7 @@ class ClipboardHistoryManager(
     private var clipboardSuggestionView: View? = null
     private var screenshotSuggestionView: View? = null
     private var screenshotSuggestionFilename: String? = null
+    private val screenshotOcrBusy = AtomicBoolean(false)
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
 
@@ -353,6 +356,16 @@ class ClipboardHistoryManager(
         }
         imageView.setOnClickListener(onClick)
         binding.root.setOnClickListener(onClick)
+        // Short tap inserts the original image; a long press runs local OCR and inserts
+        // readable text plus a JSON map of line/word coordinates into the active field.
+        val onLongClick = View.OnLongClickListener {
+            recognizeScreenshot(entry)
+            AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
+            true
+        }
+        imageView.setOnLongClickListener(onLongClick)
+        binding.root.setOnLongClickListener(onLongClick)
+        imageView.contentDescription = "Нажмите, чтобы вставить изображение; удерживайте, чтобы распознать текст"
         styleSuggestion(binding, textView) {
             // The close button dismisses the whole current screenshot batch, not just this file.
             dismissAllRecentImageSuggestions()
@@ -367,6 +380,33 @@ class ClipboardHistoryManager(
         screenshotSuggestionView = binding.root
         screenshotSuggestionFilename = entry.filename
         return screenshotSuggestionView
+    }
+
+    private fun recognizeScreenshot(entry: ClipboardHistoryEntry) {
+        if (!screenshotOcrBusy.compareAndSet(false, true)) {
+            Toast.makeText(latinIME, "Распознавание уже выполняется", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val file = entry.filename?.let { java.io.File(ClipboardDao.clipFilesDir, it) }
+        if (file == null || !file.isFile) {
+            screenshotOcrBusy.set(false)
+            Toast.makeText(latinIME, "Файл изображения больше недоступен", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(latinIME,
+            "Распознаю локально. При первом запуске загружу языковые модели (~8 МБ); потом можно без сети.",
+            Toast.LENGTH_LONG).show()
+        ru.klaviatura.clip.ScreenshotOcr.recognize(latinIME, file) { text, error ->
+            screenshotOcrBusy.set(false)
+            if (destroyed) return@recognize
+            if (text.isNullOrBlank()) {
+                val reason = error ?: "нет текста"
+                Toast.makeText(latinIME, "Не удалось распознать изображение: " + reason, Toast.LENGTH_LONG).show()
+            } else {
+                latinIME.onTextInput(text)
+                Toast.makeText(latinIME, "Готово: текст и координаты элементов вставлены", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /** an IME can't ask for permissions itself: offer a one-tap way to allow screenshots in the clipboard */
