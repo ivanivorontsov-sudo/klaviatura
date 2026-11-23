@@ -144,7 +144,7 @@ val defaultToolbarPref by lazy {
 }
 
 /** Klaviatura 1.4.0: main keys are always visible on the suggestion strip (no need to open the toolbar) */
-val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, VOICE_RECORDER, CODE)
+val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, CODE) // recorder stays in the expandable toolbar so it cannot crowd word suggestions
 val defaultPinnedToolbarPref = (defaultPinnedKeys + entries.filterNot { it == CLOSE_HISTORY || it in defaultPinnedKeys })
     .joinToString(Separators.ENTRY) { it.name + Separators.KV + (it in defaultPinnedKeys) }
 
@@ -159,6 +159,14 @@ val defaultClipboardToolbarPref by lazy {
 fun upgradeToolbarPrefs(prefs: SharedPreferences) {
     upgradeToolbarPref(prefs, Settings.PREF_TOOLBAR_KEYS, defaultToolbarPref)
     upgradeToolbarPref(prefs, Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref)
+    // The recorder used to be pinned beside the suggestion strip. On narrow phones this
+    // consumed the word row; move it back to the expandable toolbar after updating.
+    if (prefs.contains(Settings.PREF_PINNED_TOOLBAR_KEYS)) {
+        val pinned = prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref)!!
+            .split(Separators.ENTRY)
+            .map { entry -> if (entry.startsWith("VOICE_RECORDER" + Separators.KV)) "VOICE_RECORDER" + Separators.KV + "false" else entry }
+        prefs.edit { putString(Settings.PREF_PINNED_TOOLBAR_KEYS, pinned.joinToString(Separators.ENTRY)) }
+    }
     upgradeToolbarPref(prefs, Settings.PREF_CLIPBOARD_TOOLBAR_KEYS, defaultClipboardToolbarPref)
 }
 
