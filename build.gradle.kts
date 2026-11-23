@@ -3,8 +3,10 @@
 buildscript {
     val kotlinVersion = "2.4.0"
     repositories {
-        mavenCentral()
         google()
+        // Prefer Google Cloud mirror to avoid Maven Central 429 responses in CI.
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
+        mavenCentral()
     }
     dependencies {
         classpath("com.android.tools.build:gradle:9.1.1")
@@ -18,6 +20,8 @@ buildscript {
 allprojects {
     repositories {
         google()
+        // Mirror Maven Central dependencies while retaining Central as a fallback.
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
     }
