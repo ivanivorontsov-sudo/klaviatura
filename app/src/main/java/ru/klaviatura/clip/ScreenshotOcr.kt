@@ -18,7 +18,6 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
-import java.util.regex.Pattern
 
 /**
  * Offline screenshot/photo OCR. Language data is fetched once from the official
@@ -36,11 +35,11 @@ object ScreenshotOcr {
     private val main = Handler(Looper.getMainLooper())
 
     private val linePattern = Regex(
-        """<span\\b(?=[^>]*\\bclass=['"][^'"]*\\bocr_line\\b[^'"]*['"])(?=[^>]*\\btitle=['"][^'"]*bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
+        """<span\b(?=[^>]*\bclass=['"][^'"]*\bocr_line\b[^'"]*['"])(?=[^>]*\btitle=['"][^'"]*bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
     private val wordPattern = Regex(
-        """<span\\b(?=[^>]*\\bclass=['"][^'"]*\\bocrx_word\\b[^'"]*['"])(?=[^>]*\\btitle=['"][^'"]*bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
+        """<span\b(?=[^>]*\bclass=['"][^'"]*\bocrx_word\b[^'"]*['"])(?=[^>]*\btitle=['"][^'"]*bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)[^'"]*['"])[^>]*>(.*?)</span>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
 
@@ -164,7 +163,7 @@ object ScreenshotOcr {
                 val y2 = wordMatch.groupValues[4].toIntOrNull() ?: return@mapNotNull null
                 val wordText = htmlText(wordMatch.groupValues[5])
                 if (wordText.isBlank()) return@mapNotNull null
-                val confidence = Regex("""x_wconf\\s+(\\d+)""").find(wordMatch.value)
+                val confidence = Regex("""x_wconf\s+(\\d+)""").find(wordMatch.value)
                     ?.groupValues?.getOrNull(1)?.toIntOrNull()
                 Word(wordText, x1, y1, x2, y2, confidence)
             }.toList()
@@ -226,6 +225,6 @@ object ScreenshotOcr {
 
     @Suppress("DEPRECATION")
     private fun htmlText(value: String): String =
-        Html.fromHtml(value.replace(Regex("""<br\\s*/?>""", RegexOption.IGNORE_CASE), "\\n"),
+        Html.fromHtml(value.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\\n"),
             Html.FROM_HTML_MODE_LEGACY).toString().replace('\\u00a0', ' ').trim()
 }
