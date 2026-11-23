@@ -119,6 +119,13 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                // Robolectric downloads android-all-instrumented at test runtime itself,
+                // bypassing Gradle repositories. Use the same Google-hosted Maven Central
+                // mirror as the Gradle build to avoid repo1.maven.org HTTP 429 responses.
+                it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2/")
+                it.systemProperty("robolectric.dependency.repo.id", "google-maven-central-mirror")
+            }
         }
     }
 
