@@ -51,10 +51,15 @@ class VoiceSession(
             }.getOrDefault("")
             if (raw.isBlank()) null else {
                 val language = lang.substringBefore('-')
-                val scriptFit = VoiceText.scriptCompatibility(raw, language)
+                val primaryLanguage = asrs.firstOrNull()?.first?.substringBefore('-') ?: language
+                val primaryScriptFit = VoiceText.scriptCompatibility(raw, primaryLanguage)
+                val candidateScriptFit = VoiceText.scriptCompatibility(raw, language)
                 val lexicalFit = VoiceText.languageEvidence(raw, language)
                 val preference = if (lang == asrs.firstOrNull()?.first) PRIMARY_LANGUAGE_BONUS else 0.0
-                Triple(lang, raw, scriptFit * 0.18 + lexicalFit * 0.72 + preference)
+                // Compare the transcript with the active keyboard language, not only with the
+                // recognizer that produced it. This rejects fluent Latin hallucinations while
+                // still allowing a clear phrase in the secondary language to win.
+                Triple(lang, raw, primaryScriptFit * 0.25 + lexicalFit * 0.65 + candidateScriptFit * 0.05 + preference)
             }
         }.maxByOrNull { it.third }
 
@@ -118,13 +123,16 @@ class VoiceSession(
             val raw = resultWords.joinToString(" ")
             val language = lang.substringBefore('-')
             val averageConfidence = retainedConfidence / retainedCount
-            val scriptFit = VoiceText.scriptCompatibility(raw, language)
+            val primaryLanguage = asrs.firstOrNull()?.first?.substringBefore('-') ?: language
+            val primaryScriptFit = VoiceText.scriptCompatibility(raw, primaryLanguage)
+            val candidateScriptFit = VoiceText.scriptCompatibility(raw, language)
             val lexicalFit = VoiceText.languageEvidence(raw, language)
             val primaryPreference = if (lang == asrs.firstOrNull()?.first) PRIMARY_LANGUAGE_BONUS else 0.0
-            // A recognizer's confidence is not comparable with another model's confidence.
-            // Prefer words that actually look like the selected language, while keeping the
-            // active keyboard layout as a conservative prior for short/ambiguous utterances.
-            val score = averageConfidence * 0.42 + scriptFit * 0.18 + lexicalFit * 0.40 + primaryPreference
+            // Confidence values from separate recognizers are not directly comparable.
+            // The active keyboard's script is the strongest prior; a sufficiently clear
+            // vocabulary match may still switch to the secondary language.
+            val score = averageConfidence * 0.20 + primaryScriptFit * 0.25 +
+                lexicalFit * 0.45 + candidateScriptFit * 0.05 + primaryPreference
             val candidate = Candidate(resultWords, lang, score)
             if (best == null || candidate.score > best!!.score) best = candidate
         }
@@ -150,7 +158,7 @@ class VoiceSession(
 
     companion object {
         const val MIN_CONF = 0.45
-        private const val PRIMARY_LANGUAGE_BONUS = 0.20
+        private const val PRIMARY_LANGUAGE_BONUS = 0.05
     }
 }
 
