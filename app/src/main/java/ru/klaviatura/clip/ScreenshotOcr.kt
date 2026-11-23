@@ -163,7 +163,7 @@ object ScreenshotOcr {
                 val y2 = wordMatch.groupValues[4].toIntOrNull() ?: return@mapNotNull null
                 val wordText = htmlText(wordMatch.groupValues[5])
                 if (wordText.isBlank()) return@mapNotNull null
-                val confidence = Regex("""x_wconf\s+(\\d+)""").find(wordMatch.value)
+                val confidence = Regex("""x_wconf\s+(\d+)""").find(wordMatch.value)
                     ?.groupValues?.getOrNull(1)?.toIntOrNull()
                 Word(wordText, x1, y1, x2, y2, confidence)
             }.toList()
