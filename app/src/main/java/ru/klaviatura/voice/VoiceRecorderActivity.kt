@@ -167,7 +167,11 @@ class VoiceRecorderActivity : Activity() {
             .setMessage(file.name)
             .setNegativeButton("Отмена", null)
             .setPositiveButton("Удалить") { _, _ ->
-                if (file.delete()) {
+                val deleted = if (file == KeyboardAudioRecorder.file()) {
+                    KeyboardAudioRecorder.deleteCurrent()
+                    true
+                } else file.delete()
+                if (deleted) {
                     if (output == file) output = null
                     status.text = "Запись удалена"
                     refreshRecordingLibrary()
