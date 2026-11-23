@@ -58,7 +58,7 @@ class VoiceRecorderActivity : Activity() {
 
     private fun toggleRecording() {
         if (recording) stopRecording() else {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 41)
                 return
             }
@@ -66,11 +66,14 @@ class VoiceRecorderActivity : Activity() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun createRecorder(): MediaRecorder = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+
     private fun startRecording() {
         runCatching {
             val dir = File(filesDir, "recordings").apply { mkdirs() }
             output = File(dir, "voice-${System.currentTimeMillis()}.m4a")
-            val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
+            val r = createRecorder()
             recorder = r
             r.setAudioSource(MediaRecorder.AudioSource.MIC)
             r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
