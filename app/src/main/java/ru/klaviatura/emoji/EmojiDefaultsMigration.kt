@@ -39,7 +39,7 @@ object EmojiDefaultsMigration {
         e.putBoolean(PREF_PINNED_DONE, true).apply()
     }
 
-    fun migratePinned(value: String, keys: List<String> = listOf("CLIPBOARD", "EMOJI", "VOICE")): String {
+    fun migratePinned(value: String, keys: List<String> = listOf("CLIPBOARD", "EMOJI", "VOICE", "VOICE_RECORDER")): String {
         val entries = value.split(Separators.ENTRY).filter { it.isNotBlank() }.toMutableList()
         entries.removeAll { it.substringBefore(Separators.KV) in keys }
         return (keys.map { it + Separators.KV + "true" } + entries).joinToString(Separators.ENTRY)
