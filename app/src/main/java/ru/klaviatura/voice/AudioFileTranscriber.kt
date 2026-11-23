@@ -32,7 +32,7 @@ object AudioFileTranscriber {
             var offset = 0
             while (offset < pcm.size) {
                 val count = minOf(chunk, pcm.size - offset)
-                recognizer.acceptWaveForm(pcm, offset, count)
+                recognizer.acceptWaveForm(pcm.copyOfRange(offset, offset + count), count)
                 offset += count
             }
             JSONObject(recognizer.finalResult).optString("text").trim()
