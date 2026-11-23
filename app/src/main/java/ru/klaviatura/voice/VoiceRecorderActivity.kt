@@ -142,6 +142,7 @@ class VoiceRecorderActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             actions.addView(libraryButton("▶ Слушать") { playFile(file) })
+            actions.addView(libraryButton("Текст") { transcribeFile(file) })
             actions.addView(libraryButton("Обрезать") { showTrimDialog(file) })
             actions.addView(libraryButton("Отправить") { KeyboardAudioRecorder.shareFile(this@VoiceRecorderActivity, file) })
             actions.addView(libraryButton("Удалить") { confirmDelete(file) })
@@ -202,10 +203,13 @@ class VoiceRecorderActivity : Activity() {
 
     private fun transcribeFile(file: File) {
         val uri = runCatching { FileProvider.getUriForFile(this, "$packageName.voicefiles", file) }.getOrNull() ?: return
+        transcribeButton.isEnabled = true
+        selectedAudio = uri
         transcribeUri(uri)
     }
 
     private fun transcribeUri(uri: Uri) {
+        selectedAudio = uri
         if (!VoiceInput.hasModel(language)) {
             status.text = "Скачиваю офлайн-модель распознавания для $language. После загрузки нажмите ещё раз."
             transcribeButton.isEnabled = false
