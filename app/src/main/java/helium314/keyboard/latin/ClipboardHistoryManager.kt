@@ -6,11 +6,16 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.text.TextUtils
 import android.widget.Toast
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -48,6 +53,8 @@ class ClipboardHistoryManager(
     private var clipboardSuggestionView: View? = null
     private var screenshotSuggestionView: View? = null
     private var screenshotSuggestionFilename: String? = null
+    private var ocrPromptFilename: String? = null
+    private var ocrPromptView: View? = null
     private val screenshotOcrBusy = AtomicBoolean(false)
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
@@ -223,6 +230,8 @@ class ClipboardHistoryManager(
                         Log.w(TAG, "could not clear clipboard database", clearResult.exceptionOrNull())
                     screenshotSuggestionView = null
                     screenshotSuggestionFilename = null
+                    ocrPromptFilename = null
+                    ocrPromptView = null
                     ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
                     removeClipboardSuggestion()
                     latinIME.refreshScreenshotSuggestion()
@@ -292,6 +301,10 @@ class ClipboardHistoryManager(
             screenshotSuggestionView = null
             screenshotSuggestionFilename = null
             return null
+        }
+        if (entry.filename == ocrPromptFilename) {
+            ocrPromptView?.let { return it }
+            return screenshotOcrPromptView(parent, entry)
         }
         if (entry.filename == screenshotSuggestionFilename) {
             screenshotSuggestionView?.let { return it }
@@ -382,6 +395,63 @@ class ClipboardHistoryManager(
         return screenshotSuggestionView
     }
 
+    /**
+     * After OCR inserts the text+JSON, keep the source screenshot in history and let the user
+     * decide whether to keep its suggestion visible or skip to the next recent image.
+     */
+    private fun screenshotOcrPromptView(parent: ViewGroup, entry: ClipboardHistoryEntry): View {
+        val density = latinIME.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density + 0.5f).toInt()
+        val row = LinearLayout(latinIME).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), 0, dp(6), 0)
+            background = GradientDrawable().apply {
+                setColor(0xFF263445.toInt())
+                cornerRadius = dp(12).toFloat()
+            }
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            contentDescription = "Скриншот распознан. Выберите, оставить его или показать следующий"
+        }
+        val label = TextView(latinIME).apply {
+            text = "OCR готов"
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 12f
+            setPadding(dp(6), 0, dp(4), 0)
+        }
+        row.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        fun action(title: String, description: String, next: Boolean): Button =
+            Button(latinIME).apply {
+                text = title
+                textSize = 11f
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                minHeight = dp(36)
+                setPadding(dp(7), 0, dp(7), 0)
+                contentDescription = description
+                setOnClickListener {
+                    if (next) dismissImageSuggestion(entry)
+                    ocrPromptFilename = null
+                    ocrPromptView = null
+                    screenshotSuggestionView = null
+                    screenshotSuggestionFilename = null
+                    latinIME.refreshScreenshotSuggestion()
+                    AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(
+                        KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS
+                    )
+                }
+            }
+        row.addView(action("Оставить скриншот", "Оставить этот скриншот в подсказке", false))
+        row.addView(action("Показать следующий", "Перейти к следующему скриншоту", true))
+        ocrPromptView = row
+        screenshotSuggestionView = row
+        screenshotSuggestionFilename = entry.filename
+        return row
+    }
+
     private fun recognizeScreenshot(entry: ClipboardHistoryEntry) {
         if (!screenshotOcrBusy.compareAndSet(false, true)) {
             Toast.makeText(latinIME, "Распознавание уже выполняется", Toast.LENGTH_SHORT).show()
@@ -404,7 +474,12 @@ class ClipboardHistoryManager(
                 Toast.makeText(latinIME, "Не удалось распознать изображение: " + reason, Toast.LENGTH_LONG).show()
             } else {
                 latinIME.onTextInput(text)
-                Toast.makeText(latinIME, "Готово: текст и координаты элементов вставлены", Toast.LENGTH_SHORT).show()
+                ocrPromptFilename = entry.filename
+                ocrPromptView = null
+                screenshotSuggestionView = null
+                screenshotSuggestionFilename = null
+                latinIME.refreshScreenshotSuggestion()
+                Toast.makeText(latinIME, "Готово: текст и координаты вставлены. Выберите, оставить скриншот или показать следующий.", Toast.LENGTH_LONG).show()
             }
         }
     }
