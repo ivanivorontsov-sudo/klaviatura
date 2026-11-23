@@ -352,6 +352,7 @@
     <string name="clipboard" tools:keep="@string/clipboard">Clipboard</string>
     <string name="clear_clipboard" tools:keep="@string/clear_clipboard">Clear all clipboard history</string>
     <string name="voice" tools:keep="@string/voice">Voice input</string>
+    <string name="voice_recorder" tools:keep="@string/voice_recorder">Record audio file</string>
     <string name="numpad" tools:keep="@string/numpad" translatable="false">@string/layout_numpad</string>
     <string name="dpad" tools:keep="@string/dpad" translatable="false">@string/layout_dpad</string>
     <string name="settings" tools:keep="@string/settings">Settings</string>
