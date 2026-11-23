@@ -430,9 +430,14 @@ class ClipboardHistoryManager(
         }
         // Attach the dialog to the IME window rather than leaving a dead suggestion-strip prompt.
         runCatching {
-            dialog.window?.apply {
-                setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG)
-                setToken(latinIME.window.window.attributes.token)
+            val imeWindow = latinIME.window.window ?: return@runCatching
+            val token = imeWindow.attributes.token ?: imeWindow.decorView.windowToken
+                ?: return@runCatching
+            dialog.window?.let { dialogWindow ->
+                val params = dialogWindow.attributes
+                params.type = WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG
+                params.token = token
+                dialogWindow.attributes = params
             }
         }
         ocrDialog = dialog
