@@ -685,6 +685,41 @@ public class LatinIME extends InputMethodService implements
             expectedVoiceSelEnd = mInputLogic.mConnection.getExpectedSelectionEnd();
         }
 
+        @Override public boolean applyVoiceEdit(@NonNull String command) {
+            if (!isCurrentVoiceEditor() || !keepVoiceAtCurrentCaret()) return false;
+            final android.view.inputmethod.InputConnection ic = voiceConnection;
+            writingVoiceText = true;
+            try {
+                if (composing) { ic.setComposingText("", 1); composing = false; }
+                final android.view.inputmethod.ExtractedTextRequest request = new android.view.inputmethod.ExtractedTextRequest();
+                request.hintMaxChars = 50000;
+                request.hintMaxLines = 2000;
+                final android.view.inputmethod.ExtractedText extracted = ic.getExtractedText(request, 0);
+                if (extracted == null || extracted.text == null) return false;
+                final String current = extracted.text.toString();
+                final boolean wholeField = extracted.startOffset == 0;
+                final ru.klaviatura.voice.VoiceEditCommands.Edit edit =
+                        ru.klaviatura.voice.VoiceEditCommands.INSTANCE.parse(current, command, wholeField);
+                if (edit == null) return false;
+                final int start = extracted.startOffset + edit.getStart();
+                final int end = extracted.startOffset + edit.getEnd();
+                ic.beginBatchEdit();
+                try {
+                    if (!ic.setSelection(start, end)) return false;
+                    ic.commitText(edit.getReplacement(), 1);
+                } finally { ic.endBatchEdit(); }
+                lastRawPartial = "";
+                frozenPrefix = "";
+                manualEditSinceVoice = false;
+                refreshVoiceCaches();
+                android.widget.Toast.makeText(LatinIME.this, edit.getDescription(), android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            } catch (Exception e) {
+                Log.w(TAG, "voice edit command failed", e);
+                return false;
+            } finally { writingVoiceText = false; }
+        }
+
         @Override public void commitPhrase(@NonNull String text) {
             if (!isCurrentVoiceEditor()) { voiceSessionActive = false; return; }
             if (!keepVoiceAtCurrentCaret()) return;
