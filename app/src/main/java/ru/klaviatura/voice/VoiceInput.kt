@@ -53,6 +53,26 @@ object VoiceInput {
     private val sessionGeneration = AtomicLong(0L)
     private val outputRevision = AtomicLong(0L)
     var onStateChanged: (() -> Unit)? = null
+    @Volatile private var externalTarget: VoiceTarget? = null
+
+    /** Keeps the IME editor bridge available to the recorder/transcription screen. */
+    fun setExternalTarget(target: VoiceTarget?) { externalTarget = target }
+
+    /** Inserts reviewed transcription as text only; never sends or submits the host form. */
+    fun commitImportedText(text: String): Boolean {
+        val value = text.trim()
+        if (value.isEmpty()) return false
+        val target = externalTarget ?: return false
+        return try {
+            if (!target.beginSession()) return false
+            target.commitPhrase(value)
+            target.endVoice()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("KlVoice", "cannot insert imported transcript", e)
+            false
+        }
+    }
 
     /** Drop recognizer callbacks queued before the user edited text or moved the caret. */
     fun invalidatePendingOutput() { outputRevision.incrementAndGet() }
