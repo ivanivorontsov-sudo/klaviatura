@@ -377,6 +377,8 @@ interface VoiceTarget {
     fun beginSession(): Boolean
     fun showPartial(text: String)
     fun commitPhrase(text: String)
+    /** Applies an explicit spoken edit to the active field without submitting it. */
+    fun applyVoiceEdit(command: String): Boolean
     /** Freeze the current partial before the user types or moves the caret. */
     fun finishPartialForManualEdit()
     /** Re-anchor the selection after a manual key, paste, or cursor move. */
