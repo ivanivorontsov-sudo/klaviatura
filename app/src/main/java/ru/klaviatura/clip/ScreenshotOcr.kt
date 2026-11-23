@@ -29,7 +29,7 @@ import java.util.concurrent.Executors
 object ScreenshotOcr {
     // hOCR word spans carry their own bounding box in the title attribute.
     private val wordPattern = Regex(
-        """<span\\b(?=[^>]*\\bclass=['\"][^'\"]*\\bocrx_word\\b[^'\"]*['\"])(?=[^>]*\\btitle=['\"][^'\"]*\\bbbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+))[^>]*>(.*?)</span>""",
+        """<span\b(?=[^>]*\bclass=['"][^'"]*\bocrx_word\b[^'"]*['"])(?=[^>]*\btitle=['"][^'"]*\bbbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+))[^>]*>(.*?)</span>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
     private const val MAX_IMAGE_SIDE = 3600
@@ -194,13 +194,12 @@ object ScreenshotOcr {
                 lines.forEachIndexed { index, line ->
                     if (index > 0) {
                         val gap = line.top - lines[index - 1].bottom
-                        append(if (gap > medianHeight * 0.9) "\\n\\n" else "\\n")
+                        append(if (gap > medianHeight * 0.9) "\n\n" else "\n")
                     }
                     append(line.text)
                 }
             }
         } else plain
-
         val jsonLines = JSONArray()
         lines.forEachIndexed { index, line ->
             val words = JSONArray()
@@ -226,13 +225,13 @@ object ScreenshotOcr {
             .put("lines", jsonLines)
 
         return buildString {
-            append("РАСПОЗНАННЫЙ ТЕКСТ\\n")
+            append("РАСПОЗНАННЫЙ ТЕКСТ\n")
             append(readable.ifBlank { plain })
-            append("\\n\\nСТРУКТУРА И РАСПОЛОЖЕНИЕ (JSON)\\n")
-            append("Координаты привязаны к размеру исходного изображения; слова имеют отдельные рамки.\\n")
-            append("```json\\n")
+            append("\n\nСТРУКТУРА И РАСПОЛОЖЕНИЕ (JSON)\n")
+            append("Координаты привязаны к размеру обработанного изображения; слова имеют отдельные рамки.\n")
+            append("```json\n")
             append(structure.toString(2))
-            append("\\n```")
+            append("\n```")
         }
     }
 
