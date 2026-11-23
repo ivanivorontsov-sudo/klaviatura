@@ -36,6 +36,7 @@ class VoiceRecorderActivity : Activity() {
     private lateinit var transcript: EditText
     private lateinit var transcribeButton: Button
     private var recording = false
+    private var insertedText = false
     private var language = "ru"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +76,7 @@ class VoiceRecorderActivity : Activity() {
             setOnClickListener {
                 val value = transcript.text?.toString().orEmpty()
                 if (VoiceInput.commitImportedText(value)) {
+                    insertedText = true
                     Toast.makeText(this@VoiceRecorderActivity, "Текст вставлен. Ничего не отправлено.", Toast.LENGTH_LONG).show()
                     finish()
                 } else Toast.makeText(this@VoiceRecorderActivity, "Не удалось вставить: вернитесь в поле ввода и откройте диктофон с клавиатуры ещё раз", Toast.LENGTH_LONG).show()
@@ -232,6 +234,7 @@ class VoiceRecorderActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (!insertedText) VoiceInput.cancelExternalInsert()
         if (recording) stopRecording()
         runCatching { player?.release() }
         player = null
