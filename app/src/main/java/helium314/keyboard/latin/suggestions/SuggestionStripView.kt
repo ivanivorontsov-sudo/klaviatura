@@ -63,6 +63,7 @@ import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import ru.klaviatura.voice.KeyboardAudioRecorder
 import ru.klaviatura.voice.VoiceRecorderActivity
+import ru.klaviatura.voice.VoiceInput
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -490,10 +491,21 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             listener.openVoiceRecorder()
             return
         }
-        if (tag == ToolbarKey.VOICE_RECORDER && (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys)) {
+        if (tag == ToolbarKey.VOICE_RECORDER) {
             AudioAndHapticFeedbackManager.getInstance().performHapticFeedback(this, HapticEvent.KEY_LONG_PRESS)
             setToolbarVisibility(false)
-            KeyboardAudioRecorder.start(context)
+            if (VoiceInput.listening || VoiceInput.starting) {
+                VoiceInput.stop()
+                postDelayed({
+                    if (!VoiceInput.listening && !VoiceInput.starting) {
+                        KeyboardAudioRecorder.start(context)
+                    } else {
+                        android.widget.Toast.makeText(context, "Остановите голосовой ввод перед записью аудио", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }, 700L)
+            } else {
+                KeyboardAudioRecorder.start(context)
+            }
             return
         }
         if (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys) {
