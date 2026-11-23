@@ -63,6 +63,7 @@ private fun setToolbarButtonActivatedState(button: ImageButton) {
 
 fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomToolbarKeyCode(key) ?: when (key) {
     VOICE -> KeyCode.VOICE_INPUT
+    VOICE_RECORDER -> KeyCode.UNSPECIFIED
     CLIPBOARD -> KeyCode.CLIPBOARD
     NUMPAD -> KeyCode.NUMPAD
     DPAD -> KeyCode.DPAD
@@ -123,6 +124,8 @@ enum class ToolbarKey {
     VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
     INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
     PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING,
+    /** Audio recording and sharing, separate from speech-to-text. */
+    VOICE_RECORDER,
     /** Klaviatura 1.5.9: «</>» toggles the programming layout */
     CODE
 }
@@ -134,14 +137,14 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    val default = listOf(SETTINGS, EMOJI, VOICE, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
+    val default = listOf(SETTINGS, EMOJI, VOICE, VOICE_RECORDER, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }
 }
 
 /** Klaviatura 1.4.0: main keys are always visible on the suggestion strip (no need to open the toolbar) */
-val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, CODE)
+val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, VOICE_RECORDER, CODE)
 val defaultPinnedToolbarPref = (defaultPinnedKeys + entries.filterNot { it == CLOSE_HISTORY || it in defaultPinnedKeys })
     .joinToString(Separators.ENTRY) { it.name + Separators.KV + (it in defaultPinnedKeys) }
 
@@ -162,7 +165,7 @@ fun upgradeToolbarPrefs(prefs: SharedPreferences) {
 private fun upgradeToolbarPref(prefs: SharedPreferences, pref: String, default: String) {
     if (!prefs.contains(pref)) return
     val list = prefs.getString(pref, default)!!.split(Separators.ENTRY).toMutableList()
-    val splitDefault = defaultToolbarPref.split(Separators.ENTRY)
+    val splitDefault = default.split(Separators.ENTRY)
     splitDefault.forEach { entry ->
         val keyWithSeparator = entry.substringBefore(Separators.KV) + Separators.KV
         if (list.none { it.startsWith(keyWithSeparator) })
