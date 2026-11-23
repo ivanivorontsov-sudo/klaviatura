@@ -2,23 +2,21 @@
 
 package helium314.keyboard.latin
 
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.text.TextUtils
 import android.widget.Toast
-import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.TextView
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isGone
@@ -53,8 +51,7 @@ class ClipboardHistoryManager(
     private var clipboardSuggestionView: View? = null
     private var screenshotSuggestionView: View? = null
     private var screenshotSuggestionFilename: String? = null
-    private var ocrPromptFilename: String? = null
-    private var ocrPromptView: View? = null
+    private var ocrDialog: AlertDialog? = null
     private val screenshotOcrBusy = AtomicBoolean(false)
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
@@ -112,6 +109,8 @@ class ClipboardHistoryManager(
 
     fun onDestroy() {
         destroyed = true
+        ocrDialog?.dismiss()
+        ocrDialog = null
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
         screenshotHandler.removeCallbacksAndMessages(null)
@@ -230,8 +229,8 @@ class ClipboardHistoryManager(
                         Log.w(TAG, "could not clear clipboard database", clearResult.exceptionOrNull())
                     screenshotSuggestionView = null
                     screenshotSuggestionFilename = null
-                    ocrPromptFilename = null
-                    ocrPromptView = null
+                    ocrDialog?.dismiss()
+                    ocrDialog = null
                     ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
                     removeClipboardSuggestion()
                     latinIME.refreshScreenshotSuggestion()
@@ -302,10 +301,6 @@ class ClipboardHistoryManager(
             screenshotSuggestionFilename = null
             return null
         }
-        if (entry.filename == ocrPromptFilename) {
-            ocrPromptView?.let { return it }
-            return screenshotOcrPromptView(parent, entry)
-        }
         if (entry.filename == screenshotSuggestionFilename) {
             screenshotSuggestionView?.let { return it }
         }
@@ -327,7 +322,8 @@ class ClipboardHistoryManager(
                     entry.timeStamp > legacyDismissedTimestamp &&
                     now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
-            ?.maxByOrNull { it.timeStamp }
+            // Newest capture first; database IDs break same-millisecond timestamp ties.
+            ?.maxWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
     }
 
     private fun recentImageSuggestionView(
@@ -396,60 +392,61 @@ class ClipboardHistoryManager(
     }
 
     /**
-     * After OCR inserts the text+JSON, keep the source screenshot in history and let the user
-     * decide whether to keep its suggestion visible or skip to the next recent image.
+     * OCR inserts the recognized text and opens a compact dialog attached to the IME window.
+     * The screenshot itself remains at the head of the queue until the user chooses Next.
      */
-    private fun screenshotOcrPromptView(parent: ViewGroup, entry: ClipboardHistoryEntry): View {
+    private fun showScreenshotOcrDialog(entry: ClipboardHistoryEntry) {
+        if (destroyed) return
+        ocrDialog?.dismiss()
         val density = latinIME.resources.displayMetrics.density
-        fun dp(value: Int) = (value * density + 0.5f).toInt()
-        val row = LinearLayout(latinIME).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), 0, dp(6), 0)
-            background = GradientDrawable().apply {
-                setColor(0xFF263445.toInt())
-                cornerRadius = dp(12).toFloat()
+        val dialog = AlertDialog.Builder(latinIME)
+            .setTitle("Скриншот распознан")
+            .setMessage("Текст и координаты уже вставлены в поле. Что сделать со скриншотом?")
+            .setPositiveButton("Оставить") { _, _ ->
+                screenshotSuggestionView = null
+                screenshotSuggestionFilename = null
+                latinIME.refreshScreenshotSuggestion()
             }
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            contentDescription = "Скриншот распознан. Выберите, оставить его или показать следующий"
-        }
-        val label = TextView(latinIME).apply {
-            text = "OCR готов"
-            setTextColor(0xFFFFFFFF.toInt())
-            textSize = 12f
-            setPadding(dp(6), 0, dp(4), 0)
-        }
-        row.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        fun action(title: String, description: String, next: Boolean): Button =
-            Button(latinIME).apply {
-                text = title
-                textSize = 11f
-                isAllCaps = false
-                minWidth = 0
-                minimumWidth = 0
-                minHeight = dp(36)
-                setPadding(dp(7), 0, dp(7), 0)
-                contentDescription = description
-                setOnClickListener {
-                    if (next) dismissImageSuggestion(entry)
-                    ocrPromptFilename = null
-                    ocrPromptView = null
-                    screenshotSuggestionView = null
-                    screenshotSuggestionFilename = null
-                    latinIME.refreshScreenshotSuggestion()
-                    AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(
-                        KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS
-                    )
-                }
+            .setNegativeButton("Следующий") { _, _ ->
+                dismissImageSuggestion(entry)
+                screenshotSuggestionView = null
+                screenshotSuggestionFilename = null
+                latinIME.refreshScreenshotSuggestion()
             }
-        row.addView(action("Оставить скриншот", "Оставить этот скриншот в подсказке", false))
-        row.addView(action("Показать следующий", "Перейти к следующему скриншоту", true))
-        ocrPromptView = row
-        screenshotSuggestionView = row
-        screenshotSuggestionFilename = entry.filename
-        return row
+            .setNeutralButton("Закрыть очередь") { _, _ ->
+                dismissAllRecentImageSuggestions()
+                screenshotSuggestionView = null
+                screenshotSuggestionFilename = null
+                latinIME.refreshScreenshotSuggestion()
+            }
+            .create()
+        dialog.setOnCancelListener {
+            screenshotSuggestionView = null
+            screenshotSuggestionFilename = null
+            if (!destroyed) latinIME.refreshScreenshotSuggestion()
+        }
+        dialog.setOnDismissListener {
+            if (ocrDialog === dialog) ocrDialog = null
+        }
+        // Attach the dialog to the IME window rather than leaving a dead suggestion-strip prompt.
+        runCatching {
+            val imeWindow = latinIME.window.window ?: return@runCatching
+            val token = imeWindow.attributes.token ?: imeWindow.decorView.windowToken
+                ?: return@runCatching
+            dialog.window?.let { dialogWindow ->
+                val params = dialogWindow.attributes
+                params.type = WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG
+                params.token = token
+                dialogWindow.attributes = params
+            }
+        }
+        ocrDialog = dialog
+        runCatching { dialog.show() }.onFailure {
+            ocrDialog = null
+            Log.w(TAG, "could not show screenshot OCR dialog", it)
+            Toast.makeText(latinIME, "Текст вставлен. Не удалось открыть окно действий.", Toast.LENGTH_LONG).show()
+        }
+        dialog.window?.setLayout((300 * density).toInt(), WindowManager.LayoutParams.WRAP_CONTENT)
     }
 
     private fun recognizeScreenshot(entry: ClipboardHistoryEntry) {
@@ -474,12 +471,10 @@ class ClipboardHistoryManager(
                 Toast.makeText(latinIME, "Не удалось распознать изображение: " + reason, Toast.LENGTH_LONG).show()
             } else {
                 latinIME.onTextInput(text)
-                ocrPromptFilename = entry.filename
-                ocrPromptView = null
                 screenshotSuggestionView = null
                 screenshotSuggestionFilename = null
                 latinIME.refreshScreenshotSuggestion()
-                Toast.makeText(latinIME, "Готово: текст и координаты вставлены. Выберите, оставить скриншот или показать следующий.", Toast.LENGTH_LONG).show()
+                showScreenshotOcrDialog(entry)
             }
         }
     }
