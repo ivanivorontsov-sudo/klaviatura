@@ -701,7 +701,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             minWidth = (58 * density).toInt()
             setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
             background = GradientDrawable().apply {
-                setColor(Settings.getValues().mColors.get(ColorType.KEY_BACKGROUND))
+                setColor(Settings.getValues().mColors.get(ColorType.STRIP_BACKGROUND))
                 cornerRadius = 7 * density
             }
             isClickable = true
