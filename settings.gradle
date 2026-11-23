@@ -2,6 +2,8 @@ pluginManagement {
     repositories {
         // Box may redirect dl.google.com; include Maven Central and the plugin portal for Kotlin plugins.
         maven { url = uri("https://dl-ssl.google.com/dl/android/maven2/") }
+        // Google-hosted mirror reduces direct Maven Central traffic in shared CI environments.
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
         mavenCentral()
         gradlePluginPortal()
     }
