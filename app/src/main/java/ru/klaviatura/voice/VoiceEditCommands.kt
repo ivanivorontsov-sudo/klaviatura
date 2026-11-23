@@ -20,6 +20,12 @@ object VoiceEditCommands {
         "десятое" to 10, "десятый" to 10, "десятую" to 10, "десять" to 10
     )
 
+    fun looksLikeCommand(spoken: String): Boolean {
+        val value = spoken.trim().trimStart(' ', '\\t').lowercase(Locale.ROOT).replace('ё', 'е')
+        return listOf("исправь ", "замени ", "удали ", "убери ", "напиши заново", "перепиши все", "очисти ")
+            .any { value.startsWith(it) }
+    }
+
     fun parse(text: String, spoken: String, allowWholeField: Boolean = true): Edit? {
         val normalized = spoken.trim().trimEnd('.', '!', '?', ',').lowercase(Locale.ROOT)
             .replace('ё', 'е').replace(Regex("\\s+"), " ")
