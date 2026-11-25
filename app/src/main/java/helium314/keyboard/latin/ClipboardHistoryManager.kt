@@ -420,35 +420,25 @@ class ClipboardHistoryManager(
      * A separate dialog window can steal the input-window token and hide the keyboard on some ROMs.
      */
     private fun createScreenshotOcrPromptView(entry: ClipboardHistoryEntry): View {
-        val density = latinIME.resources.displayMetrics.density
-        fun dp(value: Int) = (value * density + 0.5f).toInt()
         val colors = latinIME.mSettings.current.mColors
+        // The parent screenshot slot is intentionally only 70dp wide. Keep all three
+        // actions inside that slot; a text prompt pushed every button outside its bounds,
+        // leaving an unresponsive-looking "OCR готов" chip on screen.
         val root = LinearLayout(latinIME).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), 0, dp(4), 0)
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            contentDescription = "Распознавание завершено. Оставить текущий скриншот или перейти к следующему?"
-        }
-        val question = TextView(latinIME).apply {
-            text = "OCR готов:"
-            setTextColor(colors.get(ColorType.KEY_TEXT))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
-            setSingleLine(true)
-            setPadding(dp(7), 0, dp(5), 0)
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            contentDescription = "Распознавание завершено. Действия со скриншотом."
         }
-        root.addView(question, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        fun addAction(label: String, description: String, action: () -> Unit) {
+        fun addAction(symbol: String, description: String, action: () -> Unit) {
             val button = TextView(latinIME).apply {
-                text = label
+                text = symbol
                 contentDescription = description
                 setTextColor(colors.get(ColorType.KEY_TEXT))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
-                setPadding(dp(7), 0, dp(7), 0)
+                isSingleLine = true
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -457,14 +447,15 @@ class ClipboardHistoryManager(
                     action()
                 }
             }
-            root.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            root.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
-        addAction("Оставить", "Оставить текущий скриншот") {
+        // Three equal-width targets (~23dp each) all remain visible in the fixed 70dp slot.
+        addAction("✓", "Оставить текущий скриншот") {
             screenshotQueuePinnedEntry = entry
             clearScreenshotOcrPrompt()
             latinIME.refreshScreenshotSuggestion()
         }
-        addAction("Следующий", "Перейти к следующему скриншоту") {
+        addAction("›", "Перейти к следующему скриншоту") {
             clearScreenshotOcrPrompt()
             dismissImageSuggestion(entry)
             latinIME.refreshScreenshotSuggestion()
