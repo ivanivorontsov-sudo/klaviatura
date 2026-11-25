@@ -29,7 +29,6 @@ import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.utils.prefs
 import java.io.File
-import java.net.URL
 import java.util.concurrent.Executors
 
 /**
@@ -42,7 +41,45 @@ object GifPanel {
     const val PREF_KEY = "kl_gif_key"
     private val io = Executors.newFixedThreadPool(3)
     private val main = Handler(Looper.getMainLooper())
-    private val QUICK = listOf("🔥" to "", "привет" to "привет", "спасибо" to "спасибо", "ха-ха" to "смешно", "да" to "да", "нет" to "нет", "люблю" to "love", "кот" to "кот", "вау" to "wow", "грусть" to "sad")
+    private data class Sticker(val id: String, val title: String, val tags: String)
+    private val QUICK = listOf(
+        "привет" to "привет", "спасибо" to "спасибо", "ахаха" to "смешно",
+        "огонь" to "огонь", "ура" to "ура", "люблю" to "люблю",
+        "пока" to "пока", "обнять" to "обнять", "да" to "да", "нет" to "нет"
+    )
+    private val STICKERS = listOf(
+        Sticker("hello", "Привет!", "привет здравствуй хай"),
+        Sticker("thanks", "Спасибо!", "спасибо благодарю"),
+        Sticker("lol", "Ахаха!", "смешно смех ахаха лол"),
+        Sticker("fire", "Огонь!", "огонь круто класс"),
+        Sticker("hooray", "Ура!", "ура победа отлично"),
+        Sticker("bye", "Пока!", "пока прощай"),
+        Sticker("love", "Люблю!", "люблю любовь"),
+        Sticker("hug", "Обнимаю", "обнять обнимаю поддержка"),
+        Sticker("support", "Держись", "поддержка держись"),
+        Sticker("shrug", "Не знаю", "не знаю хз"),
+        Sticker("yes", "Да!", "да ок согласен"),
+        Sticker("no", "Нет!", "нет отказ")
+    )
+    private val stickerLock = Any()
+    private fun stickerDir(ctx: Context): File = synchronized(stickerLock) {
+        val dir = File(ctx.filesDir, "gif_stickers").apply { mkdirs() }
+        val ready = File(dir, ".cc0_ready")
+        if (!ready.isFile) {
+            java.util.zip.ZipInputStream(ctx.assets.open("gif_stickers/cc0_pack.zip")).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val name = entry.name.substringAfterLast('/')
+                    if (!entry.isDirectory && name.endsWith(".gif") && name.length < 64) {
+                        File(dir, name).outputStream().use { output -> zip.copyTo(output) }
+                    }
+                    zip.closeEntry()
+                }
+            }
+            ready.writeText("CC0-1.0")
+        }
+        dir
+    }
 
     fun key(ctx: Context): String = ctx.prefs().getString(PREF_KEY, null)?.trim()?.takeIf { it.isNotEmpty() } ?: BuildConfig.KLIPY_KEY
 
@@ -86,6 +123,7 @@ object GifPanel {
                 text = label; setTextColor(Color.WHITE); textSize = 14f; setPadding(ctx.dp(10), ctx.dp(6), ctx.dp(10), ctx.dp(6)); setOnClickListener { act() }
             })
             addChip("✕") { hide() }
+            addChip("Все") { search("") }
             addChip("по слову") { search(wordBeforeCursor()) }
             QUICK.forEach { (l, q) -> addChip(l) { search(q) } }
             panel.addView(HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
@@ -105,44 +143,63 @@ object GifPanel {
         }
 
         fun search(q: String) {
-            val key = key(ctx)
+            val needle = q.trim().lowercase()
+            val items = if (needle.isEmpty()) STICKERS else STICKERS.filter { sticker ->
+                sticker.title.lowercase().contains(needle) ||
+                    sticker.tags.split(Regex("\\s+")).any { it.startsWith(needle) }
+            }
             grid.removeAllViews()
-            if (key.isEmpty()) { status.text = "Для GIF нужен бесплатный ключ KLIPY: Настройки → Внешний вид → «Ключ KLIPY для поиска GIF»."; return }
             val my = ++gen
-            status.text = if (q.isEmpty()) "Популярное…" else "Ищу «$q»…"
+            status.text = "Встроенные GIF · CC0 1.0 · без ключа и интернета"
             io.execute {
-                val items = try { KlipyApi.query(key, q) } catch (e: Exception) { null }
+                val dir = try { stickerDir(ctx) } catch (_: Exception) { null }
+                val previews = items.map { sticker ->
+                    sticker to dir?.let { BitmapFactory.decodeFile(File(it, "${sticker.id}.gif").absolutePath) }
+                }
                 main.post {
                     if (my != gen) return@post
-                    if (items == null) { status.text = "Не удалось загрузить GIF (нет сети или неверный ключ)"; return@post }
-                    status.text = if (items.isEmpty()) "Ничего не нашлось" else if (q.isEmpty()) "Популярное" else "«$q»"
+                    if (items.isEmpty()) { status.text = "В локальном наборе ничего не найдено"; return@post }
                     val w = (frame.width.takeIf { it > 0 } ?: ctx.resources.displayMetrics.widthPixels) / 3
-                    items.forEach { (preview, full) ->
-                        val iv = ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF333333.toInt()); setOnClickListener { insert(full) } }
-                        grid.addView(iv, GridLayout.LayoutParams().apply { width = w - ctx.dp(4); height = (w * 0.75).toInt(); setMargins(ctx.dp(2), ctx.dp(2), ctx.dp(2), ctx.dp(2)) })
-                        io.execute {
-                            val bmp = try { BitmapFactory.decodeStream(URL(preview).openStream()) } catch (e: Exception) { null }
-                            if (bmp != null) main.post { if (my == gen) iv.setImageBitmap(bmp) }
+                    previews.forEach { (sticker, bmp) ->
+                        val iv = ImageView(ctx).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                            setBackgroundColor(0xFF333333.toInt())
+                            contentDescription = sticker.title
+                            if (bmp != null) setImageBitmap(bmp)
+                            setOnClickListener { insertLocal(sticker.id) }
                         }
+                        grid.addView(iv, GridLayout.LayoutParams().apply {
+                            width = w - ctx.dp(4); height = (w * 0.75).toInt()
+                            setMargins(ctx.dp(2), ctx.dp(2), ctx.dp(2), ctx.dp(2))
+                        })
                     }
                 }
             }
         }
 
-        fun insert(url: String) {
-            status.text = "Загружаю GIF…"
+        fun insertLocal(id: String) {
+            status.text = "Подготавливаю GIF…"
             io.execute {
                 val file = try {
-                    val dir = File(ctx.filesDir, "gif").apply { mkdirs(); listFiles()?.sortedBy { it.lastModified() }?.dropLast(20)?.forEach { it.delete() } }
-                    File(dir, "gif_${url.hashCode().toUInt()}.gif").also { f -> if (!f.exists()) URL(url).openStream().use { i -> f.outputStream().use { i.copyTo(it) } } }
+                    val source = File(stickerDir(ctx), "$id.gif")
+                    if (!source.isFile) throw IllegalStateException("GIF asset missing: $id")
+                    val dir = File(ctx.filesDir, "gif").apply {
+                        mkdirs()
+                        listFiles()?.sortedBy { it.lastModified() }?.dropLast(20)?.forEach { it.delete() }
+                    }
+                    File(dir, "klaviatura_$id.gif").also { target ->
+                        if (!target.exists()) source.copyTo(target, overwrite = true)
+                    }
                 } catch (e: Exception) { null }
                 main.post {
-                    if (file == null) { status.text = "Не удалось скачать GIF"; return@post }
+                    if (file == null) { status.text = "Не удалось подготовить GIF"; return@post }
                     status.text = ""
                     try {
                         val uri: Uri = FileProvider.getUriForFile(ctx, ctx.getString(R.string.clipboard_provider_authority), file)
-                        listener.onContent(InputContentInfoCompat(uri, ClipDescription("GIF", arrayOf("image/gif")), Uri.parse(url)))
-                    } catch (e: Exception) { listener.onTextInput(url) }
+                        listener.onContent(InputContentInfoCompat(uri, ClipDescription("GIF", arrayOf("image/gif")), null))
+                    } catch (e: Exception) {
+                        status.text = "Поле не принимает GIF. Попробуйте поле с поддержкой изображений."
+                    }
                 }
             }
         }
