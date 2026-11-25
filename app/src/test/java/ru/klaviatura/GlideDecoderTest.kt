@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import ru.klaviatura.glide.GKey
 import ru.klaviatura.glide.GlideDecoder
+import ru.klaviatura.glide.GlideEngine
 import ru.klaviatura.glide.Lexicon
 import ru.klaviatura.glide.CrossLayout
 import java.io.File
@@ -147,11 +148,11 @@ class GlideDecoderTest {
     @Test fun nextWordPredictionsStayInThePreviousWordsScript() {
         assertEquals(
             listOf("мир", "друг"),
-            ru.klaviatura.glide.GlideEngine.filterByContextScript("привет", listOf("мир", "world", "друг", "phone"))
+            GlideEngine.filterByContextScript("привет", listOf("мир", "world", "друг", "phone"))
         )
         assertEquals(
             listOf("world"),
-            ru.klaviatura.glide.GlideEngine.filterByContextScript("hello", listOf("world", "мир"))
+            GlideEngine.filterByContextScript("hello", listOf("world", "мир"))
         )
     }
 
