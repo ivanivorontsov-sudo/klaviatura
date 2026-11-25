@@ -64,19 +64,13 @@ object GifPanel {
     private val stickerLock = Any()
     private fun stickerDir(ctx: Context): File = synchronized(stickerLock) {
         val dir = File(ctx.filesDir, "gif_stickers").apply { mkdirs() }
-        val ready = File(dir, ".cc0_ready")
-        if (!ready.isFile) {
-            java.util.zip.ZipInputStream(ctx.assets.open("gif_stickers/cc0_pack.zip")).use { zip ->
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    val name = entry.name.substringAfterLast('/')
-                    if (!entry.isDirectory && name.endsWith(".gif") && name.length < 64) {
-                        File(dir, name).outputStream().use { output -> zip.copyTo(output) }
-                    }
-                    zip.closeEntry()
+        STICKERS.forEach { sticker ->
+            val target = File(dir, "${sticker.id}.gif")
+            if (!target.isFile) {
+                ctx.assets.open("gif_stickers/${sticker.id}.gif").use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
                 }
             }
-            ready.writeText("CC0-1.0")
         }
         dir
     }
