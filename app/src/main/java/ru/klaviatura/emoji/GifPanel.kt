@@ -43,23 +43,14 @@ object GifPanel {
     private val main = Handler(Looper.getMainLooper())
     private data class Sticker(val id: String, val title: String, val tags: String)
     private val QUICK = listOf(
-        "привет" to "привет", "спасибо" to "спасибо", "ахаха" to "смешно",
-        "огонь" to "огонь", "ура" to "ура", "люблю" to "люблю",
-        "пока" to "пока", "обнять" to "обнять", "да" to "да", "нет" to "нет"
+        "привет" to "привет", "ура" to "ура", "обнять" to "обнять", "не знаю" to "не знаю"
     )
+    // Only verified bundled assets are exposed in this initial offline pack.
     private val STICKERS = listOf(
         Sticker("hello", "Привет!", "привет здравствуй хай"),
-        Sticker("thanks", "Спасибо!", "спасибо благодарю"),
-        Sticker("lol", "Ахаха!", "смешно смех ахаха лол"),
-        Sticker("fire", "Огонь!", "огонь круто класс"),
         Sticker("hooray", "Ура!", "ура победа отлично"),
-        Sticker("bye", "Пока!", "пока прощай"),
-        Sticker("love", "Люблю!", "люблю любовь"),
         Sticker("hug", "Обнимаю", "обнять обнимаю поддержка"),
-        Sticker("support", "Держись", "поддержка держись"),
-        Sticker("shrug", "Не знаю", "не знаю хз"),
-        Sticker("yes", "Да!", "да ок согласен"),
-        Sticker("no", "Нет!", "нет отказ")
+        Sticker("shrug", "Не знаю", "не знаю хз")
     )
     private val stickerLock = Any()
     private fun stickerDir(ctx: Context): File = synchronized(stickerLock) {
