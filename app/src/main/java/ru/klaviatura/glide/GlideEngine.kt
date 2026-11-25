@@ -121,7 +121,20 @@ object GlideEngine : GlideLearning {
         val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
         val lmLanguage = if (p.any { it in '\u0400'..'\u04FF' }) "ru" else "en"
         val base = lms[lmLanguage]?.next(p, n).orEmpty()
-        return (curated + tri + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
+        return filterByContextScript(p, curated + tri + user + base)
+            .filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }
+            .distinct().take(n)
+    }
+
+    /** Prevent user bigrams/trigrams collected across languages from leaking English into Russian predictions. */
+    internal fun filterByContextScript(previous: String, candidates: List<String>): List<String> {
+        val isCyrillicContext = previous.any { it in '\u0400'..'\u04FF' }
+        return candidates.filter { candidate ->
+            candidate.none { ch ->
+                ch.isLetter() && if (isCyrillicContext) ch !in '\u0400'..'\u04FF'
+                else ch !in 'A'..'Z' && ch !in 'a'..'z'
+            }
+        }
     }
     private fun loadLexicon(lang: String): Lexicon? {
         lexicons[lang]?.let { return it }

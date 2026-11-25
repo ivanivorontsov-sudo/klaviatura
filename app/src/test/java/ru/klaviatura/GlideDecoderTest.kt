@@ -143,4 +143,16 @@ class GlideDecoderTest {
         val (x, y) = path(listOf(GLOBE, SPACE))
         assertEquals(0, GlideDecoder(jcuken).decode(x, y, x.size, listOf(ru to 0.0)).size)
     }
+
+    @Test fun nextWordPredictionsStayInThePreviousWordsScript() {
+        assertEquals(
+            listOf("мир", "друг"),
+            ru.klaviatura.glide.GlideEngine.filterByContextScript("привет", listOf("мир", "world", "друг", "phone"))
+        )
+        assertEquals(
+            listOf("world"),
+            ru.klaviatura.glide.GlideEngine.filterByContextScript("hello", listOf("world", "мир"))
+        )
+    }
+
 }
