@@ -25,20 +25,15 @@ import androidx.core.content.FileProvider
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.viewpager2.widget.ViewPager2
 import helium314.keyboard.keyboard.KeyboardActionListener
-import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
-import helium314.keyboard.latin.utils.prefs
 import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * GIF tab in the emoji palette: a "GIF" chip over the emoji pages opens a panel with KLIPY search results
- * (query = the word before the cursor, or quick chips / trending). Tapping a GIF downloads it and inserts it
- * with commitContent (or puts it into the clipboard when the field doesn't accept images).
- * KLIPY needs an app key: from the build (CI secret KLIPY_KEY) or entered by the user in settings (pref kl_gif_key).
+ * Offline GIF tab in the emoji palette. All animated stickers are bundled original artwork
+ * released under CC0 1.0; no API key, network request, or third-party GIF account is required.
  */
 object GifPanel {
-    const val PREF_KEY = "kl_gif_key"
     private val io = Executors.newFixedThreadPool(3)
     private val main = Handler(Looper.getMainLooper())
     private data class Sticker(val id: String, val title: String, val tags: String)
@@ -65,8 +60,6 @@ object GifPanel {
         }
         dir
     }
-
-    fun key(ctx: Context): String = ctx.prefs().getString(PREF_KEY, null)?.trim()?.takeIf { it.isNotEmpty() } ?: BuildConfig.KLIPY_KEY
 
     fun attach(root: View, pager: ViewPager2, listener: KeyboardActionListener) {
         val tagged = pager.getTag(R.id.emoji_pager) as? Holder

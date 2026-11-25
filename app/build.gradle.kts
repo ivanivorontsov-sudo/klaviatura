@@ -25,8 +25,6 @@ android {
 
 
     defaultConfig {
-        // optional GIF search key (KLIPY), from a CI secret / env; never committed
-        buildConfigField("String", "KLIPY_KEY", "\"" + (System.getenv("KLIPY_KEY") ?: "") + "\"")
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
