@@ -758,6 +758,15 @@ public class LatinIME extends InputMethodService implements
                 ic.beginBatchEdit();
                 try {
                     CharSequence before = ic.getTextBeforeCursor(2, 0);
+                    // Exclude the interim ASR phrase when calculating spacing and sentence case.
+                    if (composing && !composingText.isEmpty()) {
+                        CharSequence context = ic.getTextBeforeCursor(composingText.length() + 2, 0);
+                        if (context != null && context.length() >= composingText.length()) {
+                            String snapshot = context.toString();
+                            if (snapshot.endsWith(composingText))
+                                before = snapshot.substring(0, snapshot.length() - composingText.length());
+                        }
+                    }
                     String t = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
                     boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
                             || before.toString().trim().matches(".*[.!?]$");
@@ -768,11 +777,32 @@ public class LatinIME extends InputMethodService implements
                             && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0));
                     String replacement = (needsSpace ? " " : "") + t;
                     if (composing) {
-                        // Replace the active interim range with the final result. Never send an
-                        // empty composing string: some vendor editors interpret that as clearing
-                        // the entire field rather than just the in-progress phrase.
-                        if (!replacement.isEmpty()) ic.setComposingText(replacement, 1);
-                        ic.finishComposingText();
+                        // Do not use setComposingText for finalization on third-party editors.
+                        // Select only the exact interim span and commit into that selection.
+                        // If its bounds cannot be verified, finish it unchanged rather than
+                        // risk replacing the entire document in a vendor-specific text field.
+                        boolean replaced = false;
+                        if (!composingText.isEmpty() && expectedVoiceSelStart == expectedVoiceSelEnd) {
+                            final int end = expectedVoiceSelEnd;
+                            final int start = end - composingText.length();
+                            final CharSequence activeTail = ic.getTextBeforeCursor(composingText.length(), 0);
+                            if (start >= 0 && activeTail != null
+                                    && composingText.contentEquals(activeTail)
+                                    && ic.setSelection(start, end)) {
+                                if (!replacement.isEmpty()) ic.commitText(replacement, 1);
+                                replaced = true;
+                            }
+                        }
+                        if (!replaced) {
+                            ic.finishComposingText();
+                            if (!replacement.isEmpty()) {
+                                android.widget.Toast.makeText(LatinIME.this,
+                                        "Не удалось безопасно заменить голосовой фрагмент; исходный текст сохранён.",
+                                        android.widget.Toast.LENGTH_LONG).show();
+                            }
+                        } else {
+                            ic.finishComposingText();
+                        }
                         composing = false;
                         composingText = "";
                     } else if (!replacement.isEmpty()) {
