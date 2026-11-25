@@ -131,7 +131,8 @@ object GlideEngine : GlideLearning {
         val isCyrillicContext = previous.any { it in '\u0400'..'\u04FF' }
         return candidates.filter { candidate ->
             candidate.none { ch ->
-                ch.isLetter() && if (isCyrillicContext) ch !in '\u0400'..'\u04FF'
+                if (!ch.isLetter()) false
+                else if (isCyrillicContext) ch !in '\u0400'..'\u04FF'
                 else ch !in 'A'..'Z' && ch !in 'a'..'z'
             }
         }
