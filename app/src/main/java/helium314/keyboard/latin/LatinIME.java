@@ -777,31 +777,35 @@ public class LatinIME extends InputMethodService implements
                             && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0));
                     String replacement = (needsSpace ? " " : "") + t;
                     if (composing) {
-                        // Do not use setComposingText for finalization on third-party editors.
-                        // Select only the exact interim span and commit into that selection.
-                        // If its bounds cannot be verified, finish it unchanged rather than
-                        // risk replacing the entire document in a vendor-specific text field.
-                        boolean replaced = false;
-                        if (!composingText.isEmpty() && expectedVoiceSelStart == expectedVoiceSelEnd) {
-                            final int end = expectedVoiceSelEnd;
-                            final int start = end - composingText.length();
-                            final CharSequence activeTail = ic.getTextBeforeCursor(composingText.length(), 0);
-                            if (start >= 0 && activeTail != null
-                                    && composingText.contentEquals(activeTail)
-                                    && ic.setSelection(start, end)) {
-                                if (!replacement.isEmpty()) ic.commitText(replacement, 1);
-                                replaced = true;
-                            }
-                        }
-                        if (!replaced) {
+                        if (replacement.isEmpty()) {
+                            // No final characters to insert: simply retain and finish the partial.
+                            // Do not leave the interim phrase selected in the editor.
                             ic.finishComposingText();
-                            if (!replacement.isEmpty()) {
+                        } else {
+                            // Do not use setComposingText for finalization on third-party editors.
+                            // Select only the exact interim span and commit into that selection.
+                            // If its bounds cannot be verified, finish it unchanged rather than
+                            // risk replacing the entire document in a vendor-specific text field.
+                            boolean replaced = false;
+                            if (!composingText.isEmpty() && expectedVoiceSelStart == expectedVoiceSelEnd) {
+                                final int end = expectedVoiceSelEnd;
+                                final int start = end - composingText.length();
+                                final CharSequence activeTail = ic.getTextBeforeCursor(composingText.length(), 0);
+                                if (start >= 0 && activeTail != null
+                                        && composingText.contentEquals(activeTail)
+                                        && ic.setSelection(start, end)) {
+                                    ic.commitText(replacement, 1);
+                                    replaced = true;
+                                }
+                            }
+                            if (!replaced) {
+                                ic.finishComposingText();
                                 android.widget.Toast.makeText(LatinIME.this,
                                         "Не удалось безопасно заменить голосовой фрагмент; исходный текст сохранён.",
                                         android.widget.Toast.LENGTH_LONG).show();
+                            } else {
+                                ic.finishComposingText();
                             }
-                        } else {
-                            ic.finishComposingText();
                         }
                         composing = false;
                         composingText = "";
