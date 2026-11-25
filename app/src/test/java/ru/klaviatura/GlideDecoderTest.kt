@@ -130,6 +130,14 @@ class GlideDecoderTest {
         }
     }
 
+    @Test fun longRussianInflectionsAreInBuiltInPriorityLexicon() {
+        val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
+        for (word in listOf("перспективно", "лимитов", "перспективный", "лимитами")) {
+            assertTrue("priority lexicon missing $word", priority.contains(word))
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(priority to 0.0, ru to 0.15)), 2)
+        }
+    }
+
     @Test fun ruWordsWithYo() {
         assertTop("ещё".replace('ё', 'е').let { if (ru.contains("ещё")) "ещё" else it },
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)

@@ -41,7 +41,12 @@ object GlideEngine : GlideLearning {
         ru.klaviatura.text.Profanity.init(context)
         ru.klaviatura.text.Yo.init(context)
         thread(name = "kl-glide-load") {
-            for (lang in listOf("ru", "en", ru.klaviatura.code.CodeMode.LEX_LANG)) { try { loadLexicon(lang); if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang) } catch (e: Throwable) { } }
+            for (lang in listOf("ru_priority", "ru", "en_brands", "en", ru.klaviatura.code.CodeMode.LEX_LANG)) {
+                try {
+                    loadLexicon(lang)
+                    if (lang == "ru" || lang == "en") loadLm(lang)
+                } catch (e: Throwable) { }
+            }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
             load()
         }
@@ -114,14 +119,20 @@ object GlideEngine : GlideLearning {
             .sortedByDescending { it.value }
             .map { it.key.substringAfterLast('\t') }
         val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
-        val base = lms.values.flatMap { it.next(p, n) }
+        val lmLanguage = if (p.any { it in '\u0400'..'\u04FF' }) "ru" else "en"
+        val base = lms[lmLanguage]?.next(p, n).orEmpty()
         return (curated + tri + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
     }
     private fun loadLexicon(lang: String): Lexicon? {
         lexicons[lang]?.let { return it }
         val ctx = appContext ?: return null
         return try {
-            val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
+            val assetPath = when (lang) {
+                "ru_priority" -> "glide/ru_priority.tsv"
+                "en_brands" -> "glide/en_extra.tsv"
+                else -> "glide/$lang.tsv"
+            }
+            val lex = ctx.assets.open(assetPath).bufferedReader().useLines { Lexicon.parse(lang, it) }
             // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
             if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
             if (lang == "en") {
@@ -132,7 +143,8 @@ object GlideEngine : GlideLearning {
                     }
                 }
             }
-            ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
+            if (lang != "ru_priority" && lang != "en_brands")
+                ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
             lexicons[lang] = lex
             lex
         } catch (e: Throwable) { null }
@@ -237,13 +249,28 @@ object GlideEngine : GlideLearning {
             else GKey(Character.toLowerCase(c.toChar()), k.x + k.width / 2f, k.y + k.height / 2f, k.width.toFloat(), k.height.toFloat())
         }
         if (keys.isEmpty()) return emptyList()
-        val main = keyboard.mId.locale.language
+        val declaredMain = keyboard.mId.locale.language
+        // Use the visible key script as a guard against the first-IME-start subtype race.
+        val cyrillicKeys = keyboard.sortedKeys.count { it.code > 0 &&
+            Character.UnicodeScript.of(it.code) == Character.UnicodeScript.CYRILLIC }
+        val latinKeys = keyboard.sortedKeys.count { it.code > 0 &&
+            Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN }
+        val main = if (cyrillicKeys > latinKeys && declaredMain !in CYR) "ru" else declaredMain
         lastMainLang = main
-        // English brands and loanwords must remain swipable on the Russian ЙЦУКЕН layout,
-        // even when the user has not enabled a separate English subtype.
-        val extraCrossLanguages = if (main == "ru") listOf("en") else emptyList()
-        val langs = (listOf(main) + locales.map { it.language } + extraCrossLanguages).distinct()
-        val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }.toMutableList()
+        // The full English lexicon is never cross-scanned on ЙЦУКЕН. Only an explicit
+        // short brand list is offered as a cross-layout exception.
+        val langs = if (main == "ru") listOf("ru") else
+            (listOf(main) + locales.map { it.language }).distinct()
+        val mainLexicon = lexiconIfReady(main) ?: return emptyList()
+        val lex = mutableListOf(mainLexicon to 0.0)
+        if (main == "ru") {
+            lexiconIfReady("ru_priority")?.let { lex.add(0, it to 0.0) }
+            lexiconIfReady("en_brands")?.let { lex.add(it to 0.65) }
+        } else {
+            langs.drop(1).forEach { lang ->
+                lexiconIfReady(lang)?.let { lex.add(it to 0.3) }
+            }
+        }
         val codeMode = ru.klaviatura.code.CodeMode.isCodeLayout(keyboard)
         ru.klaviatura.code.CodeMode.active = codeMode
         if (codeMode) {
@@ -355,7 +382,7 @@ object GlideEngine : GlideLearning {
             val tri = if (p2 == null) 0.0 else
                 trigrams["$p2\t$p\t$w"]?.let { 0.45 * ln(1.0 + it) } ?: 0.0
             (bigrams["$p\t$w"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
-                tri + GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(p, w) } ?: 0.0)
+                tri + GlideDecoder.CTX_W * (lms[if (p.any { it in '\u0400'..'\u04FF' }) "ru" else "en"]?.score(p, w) ?: 0.0)
         }
     override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
 

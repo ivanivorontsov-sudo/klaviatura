@@ -400,8 +400,8 @@ class ClipboardHistoryManager(
         binding.root.setOnLongClickListener(onLongClick)
         imageView.contentDescription = "Нажмите, чтобы вставить изображение; удерживайте, чтобы распознать текст"
         styleSuggestion(binding, textView) {
-            // The close button dismisses the whole current screenshot batch, not just this file.
-            dismissAllRecentImageSuggestions()
+            // The image-card × skips one screenshot; the next queued image appears.
+            dismissImageSuggestion(entry)
             screenshotSuggestionView = null
             screenshotSuggestionFilename = null
             latinIME.refreshScreenshotSuggestion()
@@ -449,20 +449,15 @@ class ClipboardHistoryManager(
             }
             root.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
-        // Three equal-width targets (~23dp each) all remain visible in the fixed 70dp slot.
-        addAction("✓", "Оставить текущий скриншот") {
+        // Only two actions: keep this image, or skip only this image.
+        addAction("✓", "Оставить этот скриншот в очереди") {
             screenshotQueuePinnedEntry = entry
             clearScreenshotOcrPrompt()
             latinIME.refreshScreenshotSuggestion()
         }
-        addAction("›", "Перейти к следующему скриншоту") {
+        addAction("×", "Пропустить этот скриншот и показать следующий") {
             clearScreenshotOcrPrompt()
             dismissImageSuggestion(entry)
-            latinIME.refreshScreenshotSuggestion()
-        }
-        addAction("×", "Закрыть очередь скриншотов") {
-            clearScreenshotOcrPrompt()
-            dismissAllRecentImageSuggestions()
             latinIME.refreshScreenshotSuggestion()
         }
         colors.setBackground(root, ColorType.CLIPBOARD_SUGGESTION_BACKGROUND)
