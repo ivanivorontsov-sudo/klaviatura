@@ -108,6 +108,28 @@ class GlideDecoderTest {
         assertTop("hello", r, 5)
     }
 
+    @Test fun latinBrandWordsAreSwipeableOnRussianLayout() {
+        val brands = Lexicon.parse("en", findAsset("en_extra.tsv").readLines().asSequence())
+        val lexicons = listOf(ru to 0.0, brands to 0.3)
+        for (word in listOf("realme", "samsung", "xiaomi", "huawei", "oneplus")) {
+            assertTrue("brand lexicon missing $word", brands.contains(word))
+            val points = wordPoints(jcuken, word) { CrossLayout.latToCyr[it]!! }
+            assertTop(word, decode(jcuken, points, lexicons).map { it.lowercase() }, 3)
+        }
+    }
+
+    @Test fun installedRussianSlangPackContainsSwipeableTerms() {
+        val file = listOf(
+            File("language-packs/dictionaries/slang_ru.tsv"),
+            File("../language-packs/dictionaries/slang_ru.tsv")
+        ).first { it.isFile }
+        val slang = Lexicon.parse("ru", file.readLines().asSequence())
+        for (word in listOf("вайб", "кринж", "имба", "зашквар", "чилить")) {
+            assertTrue("slang pack missing $word", slang.contains(word))
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(ru to 0.0, slang to 0.0)), 3)
+        }
+    }
+
     @Test fun ruWordsWithYo() {
         assertTop("ещё".replace('ё', 'е').let { if (ru.contains("ещё")) "ещё" else it },
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)

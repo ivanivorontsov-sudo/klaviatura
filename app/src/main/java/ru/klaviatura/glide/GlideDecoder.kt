@@ -514,16 +514,25 @@ class GlideDecoder(val keys: List<GKey>) {
             )
             // stage 1: tight gate, frequent words only (the file is in frequency-rank order, so rank = index)
             val head = p.headWords
-            for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, true, 0, head) }
+            for ((lex, langPenalty) in lexicons) {
+                if (st.stop) break
+                synchronized(lex) { scan(g, lex, langPenalty, st, true, 0, head) }
+            }
             // stage 2: the rare tail, only when stage 1 found nothing convincing
             if (!st.stop && !convincing(st)) {
                 lastTailPass = true
-                for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, true, head, Int.MAX_VALUE) }
+                for ((lex, langPenalty) in lexicons) {
+                    if (st.stop) break
+                    synchronized(lex) { scan(g, lex, langPenalty, st, true, head, Int.MAX_VALUE) }
+                }
             }
             // stage 3: loose gate (soft start / end), only when still nothing convincing
             if (!st.stop && !convincing(st)) {
                 lastLoosePass = true
-                for ((lex, langPenalty) in lexicons) { if (st.stop) break; scan(g, lex, langPenalty, st, false, 0, Int.MAX_VALUE) }
+                for ((lex, langPenalty) in lexicons) {
+                    if (st.stop) break
+                    synchronized(lex) { scan(g, lex, langPenalty, st, false, 0, Int.MAX_VALUE) }
+                }
             }
         }
         lastScanned = st.scanned; lastScored = st.scored

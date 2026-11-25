@@ -124,6 +124,14 @@ object GlideEngine : GlideLearning {
             val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
             // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
             if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
+            if (lang == "en") {
+                ctx.assets.open("glide/en_extra.tsv").bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val tab = line.indexOf('\t')
+                        if (tab > 0) lex.addOrBoost(line.substring(0, tab), line.substring(tab + 1).toLongOrNull() ?: 1L)
+                    }
+                }
+            }
             ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
             lexicons[lang] = lex
             lex
@@ -168,6 +176,37 @@ object GlideEngine : GlideLearning {
         return when (word.lowercase(Locale.ROOT).replace('ё', 'е')) {
             "россии" -> "России"
             "ии" -> "ИИ"
+            "samsung" -> "Samsung"
+            "xiaomi" -> "Xiaomi"
+            "huawei" -> "Huawei"
+            "honor" -> "HONOR"
+            "oneplus" -> "OnePlus"
+            "oppo" -> "OPPO"
+            "vivo" -> "vivo"
+            "motorola" -> "Motorola"
+            "google" -> "Google"
+            "realme" -> "realme"
+            "iphone" -> "iPhone"
+            "ipad" -> "iPad"
+            "ios" -> "iOS"
+            "android" -> "Android"
+            "tiktok" -> "TikTok"
+            "telegram" -> "Telegram"
+            "whatsapp" -> "WhatsApp"
+            "youtube" -> "YouTube"
+            "instagram" -> "Instagram"
+            "github" -> "GitHub"
+            "grok" -> "Grok"
+            "chatgpt" -> "ChatGPT"
+            "openai" -> "OpenAI"
+            "windows" -> "Windows"
+            "linux" -> "Linux"
+            "debian" -> "Debian"
+            "chrome" -> "Chrome"
+            "firefox" -> "Firefox"
+            "vivaldi" -> "Vivaldi"
+            "bluetooth" -> "Bluetooth"
+            "wifi" -> "Wi-Fi"
             else -> word
         }
     }
@@ -200,7 +239,10 @@ object GlideEngine : GlideLearning {
         if (keys.isEmpty()) return emptyList()
         val main = keyboard.mId.locale.language
         lastMainLang = main
-        val langs = (listOf(main) + locales.map { it.language }).distinct()
+        // English brands and loanwords must remain swipable on the Russian ЙЦУКЕН layout,
+        // even when the user has not enabled a separate English subtype.
+        val extraCrossLanguages = if (main == "ru") listOf("en") else emptyList()
+        val langs = (listOf(main) + locales.map { it.language } + extraCrossLanguages).distinct()
         val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }.toMutableList()
         val codeMode = ru.klaviatura.code.CodeMode.isCodeLayout(keyboard)
         ru.klaviatura.code.CodeMode.active = codeMode
@@ -269,17 +311,22 @@ object GlideEngine : GlideLearning {
         }
     }
 
-    /** Reload dictionaries after a downloaded pack is installed or removed. */
+    /**
+     * Apply newly installed/updated lexicon packs without throwing away the live dictionaries.
+     *
+     * Called by the settings screen on Dispatchers.IO. A live lexicon is guarded by the same
+     * monitor used by GlideDecoder while it scans, and this method returns only after the
+     * active Russian/English packs are available for swipe input.
+     */
     fun reloadLexicons() {
-        lexicons.clear()
-        loading.clear()
-        lms.clear()
-        val languages = listOf("ru", "en", "pl", "uk", "de", "fr", "es", "it", "pt", "nl", "sv", "tr", "bg", "ro", "hu", "el", ru.klaviatura.code.CodeMode.LEX_LANG)
-        thread(name = "kl-glide-reload") {
-            languages.forEach { lang ->
-                runCatching {
-                    loadLexicon(lang)
-                    if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang)
+        val languages = (lexicons.keys.toList() + listOf(lastMainLang, "ru", "en")).distinct()
+        languages.forEach { lang ->
+            runCatching {
+                val lexicon = lexicons[lang] ?: loadLexicon(lang)
+                if (lexicon != null && lexicons[lang] === lexicon) {
+                    synchronized(lexicon) {
+                        ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lexicon)
+                    }
                 }
             }
         }
