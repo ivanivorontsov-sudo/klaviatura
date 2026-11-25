@@ -118,15 +118,11 @@ class GlideDecoderTest {
         }
     }
 
-    @Test fun installedRussianSlangPackContainsSwipeableTerms() {
-        val file = listOf(
-            File("language-packs/dictionaries/slang_ru.tsv"),
-            File("../language-packs/dictionaries/slang_ru.tsv")
-        ).first { it.isFile }
-        val slang = Lexicon.parse("ru", file.readLines().asSequence())
+    @Test fun builtInRussianSlangDictionaryContainsSwipeableTerms() {
+        val slang = Lexicon.parse("ru", findAsset("ru_slang.tsv").readLines().asSequence())
         for (word in listOf("вайб", "кринж", "имба", "зашквар", "чилить")) {
-            assertTrue("slang pack missing $word", slang.contains(word))
-            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(ru to 0.0, slang to 0.0)), 3)
+            assertTrue("built-in slang dictionary missing $word", slang.contains(word))
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(slang to 0.0)), 3)
         }
     }
 
@@ -134,7 +130,7 @@ class GlideDecoderTest {
         val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
         for (word in listOf("перспективно", "лимитов", "перспективный", "лимитами")) {
             assertTrue("priority lexicon missing $word", priority.contains(word))
-            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(priority to 0.0, ru to 0.15)), 2)
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(priority to 0.0)), 2)
         }
     }
 

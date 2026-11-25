@@ -133,8 +133,20 @@ object GlideEngine : GlideLearning {
                 else -> "glide/$lang.tsv"
             }
             val lex = ctx.assets.open(assetPath).bufferedReader().useLines { Lexicon.parse(lang, it) }
-            // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
-            if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
+            // Domain vocabulary absent from frequency corpora: load it on every fresh install.
+            if (lang == "ru") {
+                RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
+                ctx.assets.open("glide/ru_slang.tsv").bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val tab = line.indexOf('\t')
+                        if (tab > 0) {
+                            val word = line.substring(0, tab)
+                            val frequency = line.substring(tab + 1).toLongOrNull() ?: 1L
+                            lex.addOrBoost(word, frequency)
+                        }
+                    }
+                }
+            }
             if (lang == "en") {
                 ctx.assets.open("glide/en_extra.tsv").bufferedReader().useLines { lines ->
                     lines.forEach { line ->
