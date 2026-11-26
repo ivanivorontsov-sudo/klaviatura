@@ -33,7 +33,8 @@ object ScreenshotOcr {
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
     private const val MAX_IMAGE_SIDE = 3600
-    private const val MIN_MODEL_BYTES = 300_000L
+    // Upgrade the previous fast models to Google's higher-accuracy LSTM models.
+    private const val MIN_MODEL_BYTES = 13_000_000L
     private val worker = Executors.newSingleThreadExecutor { r ->
         Thread(r, "KlaviaturaScreenshotOCR").apply { isDaemon = true }
     }
@@ -62,14 +63,15 @@ object ScreenshotOcr {
         val bitmap = decodeImage(imageFile)
         val api = TessBaseAPI()
         try {
-            if (!api.init(dataRoot.absolutePath, "rus+eng"))
-                throw IOException("Tesseract не смог загрузить русскую и английскую модели")
+            if (!api.init(dataRoot.absolutePath, "rus+eng", TessBaseAPI.OEM_LSTM_ONLY))
+                throw IOException("Tesseract не смог загрузить точные русскую и английскую модели")
             api.setVariable("preserve_interword_spaces", "1")
-            api.setImage(bitmap)
-            val plain = api.getUTF8Text().orEmpty().trim()
-            val hocr = api.getHOCRText(0).orEmpty()
-            if (plain.isBlank() && hocr.isBlank()) throw IOException("на изображении не найден читаемый текст")
-            return formatResult(plain, hocr, bitmap.width, bitmap.height)
+            api.setVariable("user_defined_dpi", "300")
+            val best = recognizeBest(api, bitmap)
+            return formatResult(
+                best.plain, best.hocr, bitmap.width, bitmap.height,
+                best.confidence, best.pageSegMode
+            )
         } finally {
             runCatching { api.recycle() }
             bitmap.recycle()
@@ -79,7 +81,7 @@ object ScreenshotOcr {
     private fun ensureModel(target: File, language: String) {
         if (target.isFile && target.length() >= MIN_MODEL_BYTES) return
         val temporary = File(target.parentFile, target.name + ".part")
-        val url = URL("https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$language.traineddata")
+        val url = URL("https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/$language.traineddata")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 20_000
             readTimeout = 60_000
@@ -127,6 +129,43 @@ object ScreenshotOcr {
         }
     }
 
+    private data class RecognitionCandidate(
+        val plain: String,
+        val hocr: String,
+        val confidence: Int,
+        val pageSegMode: Int,
+        val score: Double
+    )
+
+    /**
+     * Phone screenshots may contain a long article, short UI labels and separate message blocks.
+     * Run Tesseract with several page segmentation strategies and select the most complete,
+     * highest-confidence result instead of trusting the library's single-block default.
+     */
+    private fun recognizeBest(api: TessBaseAPI, bitmap: Bitmap): RecognitionCandidate {
+        val modes = intArrayOf(
+            TessBaseAPI.PageSegMode.PSM_AUTO,
+            TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+            TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
+        )
+        var best: RecognitionCandidate? = null
+        for (mode in modes) {
+            api.setPageSegMode(mode)
+            api.setImage(bitmap)
+            val plain = api.getUTF8Text().orEmpty().trim()
+            if (plain.isBlank()) continue
+            val confidence = api.meanConfidence().coerceIn(0, 100)
+            val hocr = api.getHOCRText(0).orEmpty()
+            val wordCount = plain.split(Regex("\\s+")).count { it.isNotBlank() }
+            // Confidence is primary; the small completeness bonus helps avoid choosing a
+            // high-confidence result that silently omitted a large block of screen text.
+            val score = confidence.toDouble() + minOf(12.0, wordCount * 0.12)
+            val candidate = RecognitionCandidate(plain, hocr, confidence, mode, score)
+            if (best == null || candidate.score > best.score) best = candidate
+        }
+        return best ?: throw IOException("на изображении не найден читаемый текст")
+    }
+
     private data class Word(
         val text: String,
         val left: Int,
@@ -145,7 +184,14 @@ object ScreenshotOcr {
         val words: List<Word>
     )
 
-    private fun formatResult(plain: String, hocr: String, width: Int, height: Int): String {
+    private fun formatResult(
+        plain: String,
+        hocr: String,
+        width: Int,
+        height: Int,
+        meanConfidence: Int,
+        pageSegMode: Int
+    ): String {
         val recognizedWords = wordPattern.findAll(hocr).mapNotNull { match ->
             val left = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
             val top = match.groupValues[2].toIntOrNull() ?: return@mapNotNull null
@@ -156,7 +202,7 @@ object ScreenshotOcr {
             val confidence = Regex("""x_wconf\s+(\d+)""").find(match.value)
                 ?.groupValues?.getOrNull(1)?.toIntOrNull()
             Word(wordText, left, top, right, bottom, confidence)
-        }.toList()
+        }.toList().sortedWith(compareBy<Word> { it.top }.thenBy { it.left })
 
         // hOCR exposes individual word boxes. Group neighbouring words by their vertical
         // centres instead of parsing nested HTML spans (which can truncate a line at word 1).
@@ -185,9 +231,13 @@ object ScreenshotOcr {
                 ordered.maxOf { it.bottom },
                 ordered
             )
-        }
+        }.sortedBy { it.top }
 
-        val readable = if (lines.isNotEmpty()) {
+        val hocrWordCount = lines.sumOf { it.words.size }
+        val plainWordCount = plain.split(Regex("\\s+")).count { it.isNotBlank() }
+        val hocrIsComplete = lines.isNotEmpty() &&
+            (plainWordCount == 0 || hocrWordCount >= (plainWordCount * 0.78).toInt())
+        val readable = if (hocrIsComplete) {
             val medianHeight = lines.map { (it.bottom - it.top).coerceAtLeast(1) }.sorted()
                 .let { it[it.size / 2] }
             buildString {
@@ -217,7 +267,9 @@ object ScreenshotOcr {
         }
         val structure = JSONObject()
             .put("schema", "klaviatura.screenshot-ocr.v1")
-            .put("engine", "Tesseract 5 / tessdata_fast rus+eng")
+            .put("engine", "Tesseract 5 LSTM / tessdata_best rus+eng")
+            .put("mean_confidence_percent", meanConfidence)
+            .put("page_segmentation_mode", pageSegMode)
             .put("image", JSONObject().put("width_px", width).put("height_px", height))
             .put("coordinate_system", "pixel; origin at top-left; bbox=[left,top,right,bottom]")
             .put("reading_order", "top-to-bottom as detected by Tesseract")
