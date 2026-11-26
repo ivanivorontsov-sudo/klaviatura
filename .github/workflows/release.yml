@@ -47,7 +47,7 @@ jobs:
       - name: Select release tag
         if: startsWith(github.ref, 'refs/heads/v')
         shell: bash
-        run: echo "RELEASE_TAG=${GITHUB_REF_NAME%-refresh}" >> "$GITHUB_ENV"
+        run: echo "RELEASE_TAG=${GITHUB_REF_NAME%%-refresh*}" >> "$GITHUB_ENV"
       - name: Point release tag at the exact merged commit
         if: startsWith(github.ref, 'refs/heads/v')
         shell: bash
@@ -99,3 +99,4 @@ jobs:
           git push origin --delete "$GITHUB_REF_NAME" || true
           git push origin --delete "v1.5.19" || true
           git push origin --delete "v1.5.19-refresh" || true
+          git push origin --delete "v1.5.19-refresh2" || true
