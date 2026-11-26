@@ -247,6 +247,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var suggestedWords = SuggestedWords.getEmptyInstance()
     private var startIndexOfMoreSuggestions = 0
     private var isClipboardSuggestionVisible = false
+    private var isExternalSuggestionVisible = false
     private var inlineSuggestionView: View? = null
     private val layoutHelper = SuggestionStripLayoutHelper(context, attrs, defStyle, wordViews, dividerViews, debugInfoViews)
     private val moreSuggestionsView = moreSuggestionsContainer.findViewById<MoreSuggestionsView>(R.id.more_suggestions_view).apply {
@@ -316,7 +317,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         pinnedKeys.isVisible = showRows
         clipboardSuggestionContainer.isVisible = showRows && clipboardSuggestionContainer.childCount > 0
         screenshotSuggestionContainer.isVisible =
-            showRows && !isClipboardSuggestionVisible && screenshotSuggestionContainer.childCount > 0
+            showRows && !isClipboardSuggestionVisible && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
         // Inline recording temporarily borrows the whole suggestion row for its transport controls.
         voiceStatusContainer.isVisible = visibility == VISIBLE && (voiceStatusActive || inlineRecorderActive)
     }
@@ -328,6 +329,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         startIndexOfMoreSuggestions = layoutHelper.layoutAndReturnStartIndexOfMoreSuggestions(
             context, suggestedWords, suggestionsStrip, this
         )
+        isExternalSuggestionVisible = false
         updateKeys()
         attachInlineSuggestionView()
         syncSuggestionAreaVisibility()
@@ -378,6 +380,33 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             )
         }
         syncSuggestionAreaVisibility()
+    }
+
+    fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
+        clear()
+        isExternalSuggestionVisible = true
+
+        if (addCloseButton) {
+            val wrapper = LinearLayout(context)
+            suggestionsStrip.doOnNextLayout {
+                wrapper.layoutParams = LinearLayout.LayoutParams(
+                    suggestionsStrip.width - 30.dpToPx(resources), LayoutParams.MATCH_PARENT
+                )
+            }
+            wrapper.addView(view)
+            suggestionsStrip.addView(wrapper)
+
+            val closeButton = createToolbarKey(context, ToolbarKey.CLOSE_HISTORY)
+            closeButton.layoutParams = toolbarKeyLayoutParams
+            setupKey(closeButton, Settings.getValues().mColors)
+            closeButton.setOnClickListener { listener.removeExternalSuggestions() }
+            suggestionsStrip.addView(closeButton)
+        } else {
+            suggestionsStrip.addView(view)
+        }
+
+        syncSuggestionAreaVisibility()
+        if (Settings.getValues().mAutoHideToolbar) setToolbarVisibility(false)
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {
