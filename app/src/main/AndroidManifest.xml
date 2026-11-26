@@ -145,7 +145,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
                 android:resource="@xml/gesture_data_path"/>
         </provider>
         <activity android:name="ru.klaviatura.voice.ModelImportActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <activity android:name="ru.klaviatura.voice.VoiceRecorderActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="portrait" />
+        <activity android:name="ru.klaviatura.voice.VoiceRecorderActivity" android:exported="false" android:excludeFromRecents="true" android:screenOrientation="portrait" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name="ru.klaviatura.voice.VoicePermissionActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" />
         <activity android:name="ru.klaviatura.bg.AiBackgroundActivity" android:exported="false"
