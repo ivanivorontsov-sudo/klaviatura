@@ -76,10 +76,12 @@ class VoiceRecorderActivity : Activity() {
             textSize = 15f
             gravity = Gravity.CENTER
             setPadding(0, 8, 0, 14)
+            setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground_weak))
         }
         val libraryTitle = TextView(this).apply {
             text = "Записи, созданные клавиатурой"
             textSize = 18f
+            setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground))
             setPadding(0, 12, 0, 6)
         }
         recordingLibrary = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -99,6 +101,8 @@ class VoiceRecorderActivity : Activity() {
             maxLines = 12
             gravity = Gravity.TOP
             textSize = 16f
+            setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground))
+            setHintTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground_weak))
         }
         val insert = Button(this).apply {
             text = "Вставить текст в поле ввода"
@@ -168,6 +172,7 @@ class VoiceRecorderActivity : Activity() {
             recordingLibrary.addView(TextView(this).apply {
                 text = "Пока нет сохранённых записей. Удерживайте второй микрофон на клавиатуре, чтобы начать."
                 textSize = 14f
+                setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground_weak))
                 setPadding(0, 4, 0, 12)
             })
             return
