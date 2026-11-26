@@ -55,6 +55,13 @@
             android:gravity="center_horizontal"
             android:hapticFeedbackEnabled="false"
             android:soundEffectsEnabled="false" />
+        <!-- Copied text remains visible beside live word predictions. -->
+        <FrameLayout
+            android:id="@+id/clipboard_suggestion_container"
+            android:layout_width="112dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_vertical"
+            android:visibility="gone" />
         <!-- Independent fixed slot: screenshot cards never enter the word-suggestion row. -->
         <FrameLayout
             android:id="@+id/screenshot_suggestion_container"
