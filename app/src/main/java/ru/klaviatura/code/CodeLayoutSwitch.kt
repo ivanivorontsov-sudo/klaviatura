@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package ru.klaviatura.code
 
+import android.content.Context
 import android.content.SharedPreferences
+import android.widget.Toast
 import android.view.inputmethod.InputMethodSubtype
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.RichInputMethodManager
