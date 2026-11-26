@@ -3,7 +3,6 @@ on:
   push:
     branches: ['v*']
     tags: ['v*']
-  create:
   pull_request:
     branches: [main]
     paths:
@@ -13,10 +12,13 @@ on:
       - 'app/build.gradle.kts'
       - '.github/workflows/release.yml'
 permissions: { contents: write }
+concurrency:
+  group: klaviatura-release-${{ github.ref_name }}
+  cancel-in-progress: false
 jobs:
   build:
-    # A create event is only a release trigger for an explicitly versioned v* branch.
-    if: github.event_name != 'create' || startsWith(github.ref, 'refs/heads/v')
+    # Tag pushes are caused by the branch release job; do not start a duplicate build.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,29 +43,51 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          target_commitish: ${{ github.sha }}
-          name: Клавиатура ${{ github.ref_name }}
-          body: |
-            ## Клавиатура ${{ github.ref_name }}
-            - Крестик у скриншота скрывает всю ожидающую очередь, не удаляя историю; новый снимок снова включает очередь.
-            - Очередь вставляет снимки в порядке добавления, по одному; крестик в OCR-решении пропускает только текущий снимок.
-            - Скопированный текст получает приоритет над скриншотами; вставка или собственный крестик текста возвращают очередь.
-            - Карточка скриншота занимает отдельный слот и не затирает три словесные подсказки.
-            - Поиск длинных редких слов учитывает первую и последнюю буквы жеста; порядок близких клавиш требует реального продвижения пальца.
-            - Голосовой ввод показывает раздельные состояния запуска микрофона и активной записи.
-            - Словесные подсказки восстанавливаются после диктовки и корректно переживают сворачивание клавиатуры и переключение приложений.
-            - Курсор и composing-кэш синхронизируются после ручного редактирования.
-            - В буфере: постоянная кнопка «Очистить всё» с подтверждением, фильтры по тексту/фото/файлам/закреплённым, время копирования и удаление отдельной записи, включая закреплённую.
-            - Кнопка «Очистить всё» удаляет закреплённые и обычные записи, скриншоты, файлы истории и системный клип.
-            - Очистка старого редактора выполняется до скрытия окна; позднее уведомление о скрытии не отменяет обновление подсказок нового поля.
-            - Внутренние экраны импорта и настройки не создают лишние карточки в списке недавних задач.
-            - APK собирается с release-подписью; перед публикацией выполняются unit-тесты и проверка JNI.
-          files: app/build/outputs/apk/release/*.apk
+      - name: Point release tag at the exact merged commit
+        if: startsWith(github.ref, 'refs/heads/v')
+        shell: bash
+        run: |
+          git tag --force "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$GITHUB_REF_NAME"
+      - name: Recreate release with a fresh publication date and only the current APK
+        if: startsWith(github.ref, 'refs/heads/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## Клавиатура 1.5.19
+
+          - Исправлен выбор русского языка свайпа при первом запуске; русская раскладка не подмешивает полный английский словарь.
+          - Добавлены приоритетный словарь редких и длинных русских слов и 97 разговорных форм; ускорен ограниченный поиск длинных слов.
+          - Улучшено распознавание свайпа между соседними клавишами: учитывается реальное продвижение пальца.
+          - Локальные n-граммные подсказки учитывают язык предыдущего слова.
+          - Голосовой ввод защищён от очистки поля пустыми промежуточными результатами распознавания.
+          - Очередь скриншотов работает по FIFO; крестик скрывает очередь, не удаляя историю, а OCR-пропуск убирает только текущий снимок.
+          - Текстовый буфер имеет приоритет над скриншотами; закрытие карточки текста возвращает очередь.
+          - Карточка скриншота не занимает место трёх словесных подсказок.
+          - Добавлены четыре оригинальные офлайн GIF-наклейки с лицензией CC0.
+          - В настройках «О приложении» раздельно указаны исходный проект HeliBoard и автор кастомной версии Иван Воронцов.
+
+          ### Основа и авторство
+          - Исходный проект: https://github.com/HeliBorg/HeliBoard
+          - Репозиторий кастомной версии: https://github.com/ivanivorontsov-sudo/klaviatura
+
+          ### Предиктор
+          Встроенные предсказания используют локальную статистическую n-граммную модель. MNN-Pocket-0.3B-RU в эту версию не интегрирован.
+
+          ### Сборка
+          Версия 1.5.19 (versionCode 41). APK подписан release-ключом; unit-тесты и проверка JNI после R8 пройдены.
+          EOF
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+          gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/*.apk \
+            --verify-tag \
+            --title "Клавиатура $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --target "$GITHUB_SHA" \
+            --latest
       - name: Delete temporary release branch
         if: startsWith(github.ref, 'refs/heads/v')
-        run: git push origin --delete "$GITHUB_REF_NAME"
+        run: git push origin --delete "$GITHUB_REF_NAME" || true
