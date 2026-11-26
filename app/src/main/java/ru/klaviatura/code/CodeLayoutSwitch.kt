@@ -35,12 +35,12 @@ object CodeLayoutSwitch {
         else -> CodeMode.LAYOUT_LATIN
     }
 
-    /** pure: put CODE on, right after the last pinned key that is on (other pinned keys stay as they are) */
-    fun pinCodeKey(value: String): String {
+    /** Keep the CODE action enabled, but move it out of the pinned row and into the expandable menu. */
+    fun unpinCodeKey(value: String): String {
         val entries = value.split(Separators.ENTRY).filter { it.isNotBlank() }.toMutableList()
-        entries.removeAll { it.substringBefore(Separators.KV) == "CODE" }
-        val last = entries.indexOfLast { it.substringAfter(Separators.KV, "") == "true" }
-        entries.add(last + 1, "CODE" + Separators.KV + "true")
+        val index = entries.indexOfFirst { it.substringBefore(Separators.KV) == "CODE" }
+        if (index >= 0) entries[index] = "CODE" + Separators.KV + "false"
+        else entries.add("CODE" + Separators.KV + "false")
         return entries.joinToString(Separators.ENTRY)
     }
 
