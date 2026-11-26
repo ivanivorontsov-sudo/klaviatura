@@ -127,7 +127,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val toolbarContainer: View = findViewById(R.id.toolbar_container)
     private val pinnedKeys: ViewGroup = findViewById(R.id.pinned_keys)
     private val suggestionsStrip: ViewGroup = findViewById(R.id.suggestions_strip)
-    // Screenshot chips have their own slot and never share the word-suggestion container.
+    // Clipboard text and screenshots have independent slots, so dictionary refreshes cannot remove them.
+    private val clipboardSuggestionContainer: FrameLayout = findViewById(R.id.clipboard_suggestion_container)
     private val screenshotSuggestionContainer: FrameLayout = findViewById(R.id.screenshot_suggestion_container)
     private val voiceStatusContainer: FrameLayout = findViewById(R.id.voice_status_container)
     private val voiceStatusLabel = TextView(context).apply {
@@ -245,7 +246,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private lateinit var listener: Listener
     private var suggestedWords = SuggestedWords.getEmptyInstance()
     private var startIndexOfMoreSuggestions = 0
-    private var isExternalSuggestionVisible = false // Required to disable the more suggestions if other suggestions are visible
+    private var isClipboardSuggestionVisible = false
+    private var isExternalSuggestionVisible = false
     private var inlineSuggestionView: View? = null
     private val layoutHelper = SuggestionStripLayoutHelper(context, attrs, defStyle, wordViews, dividerViews, debugInfoViews)
     private val moreSuggestionsView = moreSuggestionsContainer.findViewById<MoreSuggestionsView>(R.id.more_suggestions_view).apply {
@@ -313,8 +315,9 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         val showRows = visibility == VISIBLE && !toolbarContainer.isVisible && !inlineRecorderActive
         suggestionsStrip.isVisible = showRows
         pinnedKeys.isVisible = showRows
+        clipboardSuggestionContainer.isVisible = showRows && clipboardSuggestionContainer.childCount > 0
         screenshotSuggestionContainer.isVisible =
-            showRows && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
+            showRows && !isClipboardSuggestionVisible && !isExternalSuggestionVisible && screenshotSuggestionContainer.childCount > 0
         // Inline recording temporarily borrows the whole suggestion row for its transport controls.
         voiceStatusContainer.isVisible = visibility == VISIBLE && (voiceStatusActive || inlineRecorderActive)
     }
@@ -362,6 +365,23 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         syncSuggestionAreaVisibility()
     }
 
+    /**
+     * Shows the copied-text chip in its own slot. Word predictions remain live and
+     * ordinary suggestion refreshes cannot detach this view.
+     */
+    fun setClipboardSuggestionView(view: View?) {
+        clipboardSuggestionContainer.removeAllViews()
+        isClipboardSuggestionVisible = view != null
+        if (view != null) {
+            (view.parent as? ViewGroup)?.removeView(view)
+            clipboardSuggestionContainer.addView(
+                view,
+                FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
+        }
+        syncSuggestionAreaVisibility()
+    }
+
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
         clear()
         isExternalSuggestionVisible = true
@@ -369,7 +389,9 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (addCloseButton) {
             val wrapper = LinearLayout(context)
             suggestionsStrip.doOnNextLayout {
-                wrapper.layoutParams = LinearLayout.LayoutParams(suggestionsStrip.width - 30.dpToPx(resources), LayoutParams.MATCH_PARENT)
+                wrapper.layoutParams = LinearLayout.LayoutParams(
+                    suggestionsStrip.width - 30.dpToPx(resources), LayoutParams.MATCH_PARENT
+                )
             }
             wrapper.addView(view)
             suggestionsStrip.addView(wrapper)
@@ -377,9 +399,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             val closeButton = createToolbarKey(context, ToolbarKey.CLOSE_HISTORY)
             closeButton.layoutParams = toolbarKeyLayoutParams
             setupKey(closeButton, Settings.getValues().mColors)
-            closeButton.setOnClickListener {
-                listener.removeExternalSuggestions()
-            }
+            closeButton.setOnClickListener { listener.removeExternalSuggestions() }
             suggestionsStrip.addView(closeButton)
         } else {
             suggestionsStrip.addView(view)
@@ -806,7 +826,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
 
         toolbarExpandKey.setOnClickListener(if (!toolbarIsExpandable) null else this)
-        isExternalSuggestionVisible = false
+        isClipboardSuggestionVisible = clipboardSuggestionContainer.childCount > 0
         syncSuggestionAreaVisibility()
     }
 

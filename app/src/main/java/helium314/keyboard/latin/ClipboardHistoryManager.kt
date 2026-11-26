@@ -536,7 +536,7 @@ class ClipboardHistoryManager(
         textView.text = "📷 Разрешить скриншоты в буфере"
         textView.setOnClickListener {
             ru.klaviatura.clip.Screenshots.markOffered(latinIME)
-            binding.root.isGone = true
+            removeClipboardSuggestion(suppressPrimary = false)
             try { latinIME.startActivity(android.content.Intent(latinIME, ru.klaviatura.clip.MediaPermissionActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
         }
@@ -680,9 +680,11 @@ class ClipboardHistoryManager(
         if (suppressPrimary) dontShowCurrentSuggestion = true
         val csv = clipboardSuggestionView ?: return
         if (csv.parent != null && !csv.isGone) {
-            // clipboard view is shown ->
+            // Recompute the chip slot: a permission prompt may replace this card.
             latinIME.setNeutralSuggestionStrip()
             latinIME.mHandler.postResumeSuggestions(false)
+        } else {
+            latinIME.clearClipboardSuggestionView()
         }
         csv.isGone = true
         // The text card has released the external suggestion strip; restore the screenshot

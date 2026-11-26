@@ -61,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          ## Клавиатура 1.5.19
+          ## Клавиатура 1.5.20
 
           - Исправлен выбор русского языка свайпа при первом запуске; русская раскладка не подмешивает полный английский словарь.
           - Добавлены приоритетный словарь редких и длинных русских слов и 97 разговорных форм; ускорен ограниченный поиск длинных слов.
@@ -73,6 +73,8 @@ jobs:
           - Карточка скриншота не занимает место трёх словесных подсказок.
           - Добавлены четыре оригинальные офлайн GIF-наклейки с лицензией CC0.
           - В настройках «О приложении» раздельно указаны исходный проект HeliBoard и автор кастомной версии Иван Воронцов.
+          - Карточка скопированного текста вынесена в отдельную область и не исчезает при обновлении словарных подсказок.
+          - Исправлена стартовая прокрутка «Голосовых инструментов»: при открытии видна верхняя часть списка записей.
 
           ### Основа и авторство
           - Исходный проект: https://github.com/HeliBorg/HeliBoard
@@ -82,7 +84,7 @@ jobs:
           Встроенные предсказания используют локальную статистическую n-граммную модель. MNN-Pocket-0.3B-RU в эту версию не интегрирован.
 
           ### Сборка
-          Версия 1.5.19 (versionCode 41). APK подписан release-ключом; unit-тесты и проверка JNI после R8 пройдены.
+          Версия 1.5.20 (versionCode 42). APK подписан release-ключом; unit-тесты и проверка JNI после R8 пройдены.
           EOF
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --yes
@@ -97,6 +99,6 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/v')
         run: |
           git push origin --delete "$GITHUB_REF_NAME" || true
-          git push origin --delete "v1.5.19" || true
-          git push origin --delete "v1.5.19-refresh" || true
-          git push origin --delete "v1.5.19-refresh2" || true
+          git push origin --delete "v1.5.20" || true
+          git push origin --delete "v1.5.20-refresh" || true
+          git push origin --delete "v1.5.20-refresh2" || true
