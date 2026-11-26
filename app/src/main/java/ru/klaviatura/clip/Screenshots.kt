@@ -58,6 +58,17 @@ object Screenshots {
 
     private data class PendingScreenshot(val id: Long, val uri: Uri, val timestamp: Long, val description: ClipDescription)
 
+    /** Select a recent capture time, falling back to MediaStore insertion time when EXIF is stale. */
+    internal fun effectiveTimestamp(nowMillis: Long, dateAddedSeconds: Long, dateTakenMillis: Long, id: Long): Long {
+        val earliest = nowMillis - WINDOW_S * 1000L
+        val latest = nowMillis + 60_000L
+        return if (dateTakenMillis in earliest..latest) {
+            dateTakenMillis
+        } else {
+            dateAddedSeconds * 1000L + (id % 1000L)
+        }
+    }
+
     /**
      * Import every unseen screenshot in the recent window. The callback runs on the caller's
      * worker thread, keeping image copying and hashing off the keyboard UI thread.
@@ -82,15 +93,14 @@ object Screenshots {
                 ),
                 "${MediaStore.Images.Media.DATE_ADDED} > ?", arrayOf((now - WINDOW_S).toString()),
                 "${MediaStore.Images.Media.DATE_ADDED} DESC")?.use { c ->
-                var scanned = 0
-                while (c.moveToNext() && scanned++ < 100) {
+                while (c.moveToNext()) {
                     if (!isScreenshot(c.getString(3), c.getString(4))) continue
                     val id = c.getLong(0)
                     if (id.toString() in importedIds) continue
-                    // Prefer the actual capture time so a new screenshot can reopen the prompt
-                    // immediately, even when it is created in the same DATE_ADDED second.
-                    val takenAt = c.getLong(5)
-                    val timestamp = if (takenAt > 0L) takenAt else c.getLong(1) * 1000L + (id % 1000L)
+                    // DATE_TAKEN may be missing or stale on vendor ROMs. Trust it only
+                    // when it falls inside the current import window; otherwise use MediaStore's
+                    // insertion time so a fresh capture is not mistaken for an old image.
+                    val timestamp = effectiveTimestamp(System.currentTimeMillis(), c.getLong(1), c.getLong(5), id)
                     val uri = ContentUris.withAppendedId(col, id)
                     val mime = c.getString(2) ?: "image/png"
                     pending.add(PendingScreenshot(id, uri, timestamp,
@@ -113,16 +123,28 @@ object Screenshots {
         } catch (e: Throwable) { android.util.Log.w("KlScreenshots", "import failed", e) }
     }
 
-    /** new screenshots arrive while the keyboard is alive (ColorOS writes the file a moment after the flash) */
+    /** New screenshots arrive while the keyboard is alive; some ROMs publish rows in stages. */
     fun observer(ctx: Context, handler: android.os.Handler, add: (Uri, Long, ClipDescription) -> Boolean) =
         object : android.database.ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean) {
-                // the file may still be pending: retry shortly
+            private fun scheduleImport() {
+                // The MediaStore row or image bytes can appear after the first notification.
+                // Debounce vendor-ROM bursts, then retry long enough for the file to finish writing.
                 handler.removeCallbacksAndMessages(this)
-                for (d in longArrayOf(300, 1500, 4000)) handler.postAtTime({ importRecent(ctx, add) }, this, android.os.SystemClock.uptimeMillis() + d)
+                val now = android.os.SystemClock.uptimeMillis()
+                for (delay in longArrayOf(350, 1200, 3000, 6500)) {
+                    handler.postAtTime({ importRecent(ctx, add) }, this, now + delay)
+                }
             }
-        }.also { o ->
-            try { ctx.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, o) } catch (e: Throwable) { }
+
+            override fun onChange(selfChange: Boolean) = scheduleImport()
+            override fun onChange(selfChange: Boolean, uri: Uri?) = scheduleImport()
+            override fun onChange(selfChange: Boolean, uri: Uri?, flags: Int) = scheduleImport()
+        }.also { observer ->
+            try {
+                ctx.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
+            } catch (e: Throwable) {
+                android.util.Log.w("KlScreenshots", "cannot observe MediaStore changes", e)
+            }
         }
 }
 
