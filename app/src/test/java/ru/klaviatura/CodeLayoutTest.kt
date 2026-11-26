@@ -7,6 +7,7 @@ import org.junit.Test
 import helium314.keyboard.latin.common.Constants.Separators
 import helium314.keyboard.latin.utils.ToolbarKey
 import helium314.keyboard.latin.utils.defaultPinnedToolbarPref
+import helium314.keyboard.latin.utils.defaultToolbarPref
 import ru.klaviatura.code.CodeLayoutSwitch
 import ru.klaviatura.code.CodeMode
 
