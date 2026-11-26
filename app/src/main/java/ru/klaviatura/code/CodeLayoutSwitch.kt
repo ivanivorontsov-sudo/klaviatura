@@ -44,7 +44,7 @@ object CodeLayoutSwitch {
         return entries.joinToString(Separators.ENTRY)
     }
 
-    /** layouts to enable on update: always Latin «Code», plus the Cyrillic «Код» when a Cyrillic language is enabled */
+    /** layouts added only after the user enables programming layouts: Latin plus Cyrillic when relevant */
     fun layoutsToEnable(enabledLayouts: Collection<String?>, hasCyrillic: Boolean): List<String> {
         val wanted = if (hasCyrillic) listOf(CodeMode.LAYOUT_LATIN, CodeMode.LAYOUT_RU) else listOf(CodeMode.LAYOUT_LATIN)
         return wanted.filter { it !in enabledLayouts }
