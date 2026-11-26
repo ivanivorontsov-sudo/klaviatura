@@ -139,7 +139,9 @@ class GlideDecoderTest {
         val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
         val targets = listOf(
             "перспективно", "достопримечательность", "непредсказуемость",
-            "производительностью", "электротехнический", "распознавание"
+            "производительностью", "электротехнический", "распознавание",
+            "переписывались", "вскарабкался", "въедливый", "абрикосовый",
+            "шпаргалка", "свайпнуть", "выхухоль"
         )
         for (word in targets) {
             assertTrue("priority lexicon missing $word", priority.contains(word))
