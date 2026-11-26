@@ -51,8 +51,8 @@ object CodeLayoutSwitch {
     }
 
     /**
-     * One-time migration: preserve programming layouts that an existing user already has,
-     * but do not add them automatically. Move the CODE action from the pinned row to the
+     * One-time migration: remove programming layouts that older versions enabled automatically.
+     * From this version they are opt-in in Settings. Move CODE from the pinned row to the
      * expandable toolbar so the suggestion strip keeps its space.
      */
     fun migrate(context: Context) {
