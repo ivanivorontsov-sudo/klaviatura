@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -100,7 +101,24 @@ class VoiceRecorderActivity : Activity() {
         listOf(status, libraryTitle, recordingLibrary, recordButton, play, share, choose, transcribeButton, transcript, insert, close).forEach { view ->
             root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        setContentView(ScrollView(this).apply { addView(root) })
+
+        // Do not let the transcript EditText steal initial focus and scroll the page
+        // down to the bottom when the voice tools screen opens.
+        root.isFocusableInTouchMode = true
+        root.isFocusable = true
+        val page = ScrollView(this).apply {
+            isFillViewport = true
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+            addView(root)
+        }
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        setContentView(page)
+        page.post {
+            transcript.clearFocus()
+            page.requestFocus()
+            page.scrollTo(0, 0)
+        }
         refreshRecordingLibrary()
 
         intent.getStringExtra(EXTRA_TRIM_FILE)?.let { path ->
