@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package ru.klaviatura.code
 
+import android.content.Context
 import android.content.SharedPreferences
+import android.widget.Toast
 import android.view.inputmethod.InputMethodSubtype
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.RichInputMethodManager
@@ -15,13 +17,16 @@ import helium314.keyboard.latin.utils.mainLayoutName
 import helium314.keyboard.latin.utils.prefs
 
 /**
- * 1.5.9: the programming layout was invisible because it only existed as an optional layout that had to be added by
- * hand in the language settings. Now it is (a) enabled for existing users on update, so it shows up in the globe /
- * space-long-press language switch, and (b) reachable with the «</>» toolbar key, which toggles it.
+ * Optional Russian and Latin programming layouts. They are added only after an explicit opt-in
+ * in Settings; the toolbar action merely switches to an already enabled layout.
  */
 object CodeLayoutSwitch {
-    const val PREF_DONE = "klaviatura_code_layout_v1"
+    private const val PREF_MIGRATION_V2 = "klaviatura_code_layout_v2"
+    const val PREF_CODE_LAYOUTS_ENABLED = "klaviatura_code_layouts_enabled"
     private var previous: InputMethodSubtype? = null
+
+    fun isEnabled(context: Context): Boolean =
+        context.prefs().getBoolean(PREF_CODE_LAYOUTS_ENABLED, false)
 
     /** pure decision: main layout to go to, null = leave the code layout */
     fun targetLayout(currentLayout: String?, cyrillic: Boolean): String? = when {
@@ -30,36 +35,45 @@ object CodeLayoutSwitch {
         else -> CodeMode.LAYOUT_LATIN
     }
 
-    /** pure: put CODE on, right after the last pinned key that is on (other pinned keys stay as they are) */
-    fun pinCodeKey(value: String): String {
+    /** Keep the CODE action enabled, but move it out of the pinned row and into the expandable menu. */
+    fun unpinCodeKey(value: String): String {
         val entries = value.split(Separators.ENTRY).filter { it.isNotBlank() }.toMutableList()
-        entries.removeAll { it.substringBefore(Separators.KV) == "CODE" }
-        val last = entries.indexOfLast { it.substringAfter(Separators.KV, "") == "true" }
-        entries.add(last + 1, "CODE" + Separators.KV + "true")
+        val index = entries.indexOfFirst { it.substringBefore(Separators.KV) == "CODE" }
+        if (index >= 0) entries[index] = "CODE" + Separators.KV + "false"
+        else entries.add("CODE" + Separators.KV + "false")
         return entries.joinToString(Separators.ENTRY)
     }
 
-    /** layouts to enable on update: always Latin «Code», plus the Cyrillic «Код» when a Cyrillic language is enabled */
+    /** layouts added only after the user enables programming layouts: Latin plus Cyrillic when relevant */
     fun layoutsToEnable(enabledLayouts: Collection<String?>, hasCyrillic: Boolean): List<String> {
         val wanted = if (hasCyrillic) listOf(CodeMode.LAYOUT_LATIN, CodeMode.LAYOUT_RU) else listOf(CodeMode.LAYOUT_LATIN)
         return wanted.filter { it !in enabledLayouts }
     }
 
-    /** one-time, on update: enable the layouts (never removing the user's own) and pin the «</>» key */
-    fun migrate(prefs: SharedPreferences) {
-        if (prefs.getBoolean(PREF_DONE, false)) return
+    /**
+     * One-time migration: remove programming layouts that older versions enabled automatically.
+     * From this version they are opt-in in Settings. Move CODE from the pinned row to the
+     * expandable toolbar so the suggestion strip keeps its space.
+     */
+    fun migrate(context: Context) {
+        val prefs = context.prefs()
+        if (prefs.getBoolean(PREF_MIGRATION_V2, false)) return
         try {
-            enableLayouts(prefs)
-            prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let {
-                prefs.edit().putString(Settings.PREF_PINNED_TOOLBAR_KEYS, pinCodeKey(it)).apply()
+            if (!prefs.contains(PREF_CODE_LAYOUTS_ENABLED)) {
+                // Previous versions enabled these layouts automatically. Make the new feature
+                // genuinely opt-in for everyone, including existing installations.
+                SubtypeSettings.getEnabledSubtypes(true)
+                    .filter { CodeMode.isCodeLayout(it.mainLayoutName()) }
+                    .forEach { SubtypeSettings.removeEnabledSubtype(context, it) }
+                prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, false).apply()
             }
-            prefs.getString(Settings.PREF_TOOLBAR_KEYS, null)?.let {
-                prefs.edit().putString(Settings.PREF_TOOLBAR_KEYS, pinCodeKey(it)).apply()
+            prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let {
+                prefs.edit().putString(Settings.PREF_PINNED_TOOLBAR_KEYS, unpinCodeKey(it)).apply()
             }
         } catch (e: Throwable) {
             android.util.Log.w("KlCode", "code layout migration", e)
         }
-        prefs.edit().putBoolean(PREF_DONE, true).apply()
+        prefs.edit().putBoolean(PREF_MIGRATION_V2, true).apply()
     }
 
     private fun enableLayouts(prefs: SharedPreferences) {
@@ -80,13 +94,30 @@ object CodeLayoutSwitch {
         return s
     }
 
-    /** the «</>» toolbar key: into the code layout and back to the previous layout */
+    /** Called only from the explicit Settings switch. */
+    fun setEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.prefs()
+        if (enabled) {
+            enableLayouts(prefs)
+        } else {
+            SubtypeSettings.getEnabledSubtypes(true)
+                .filter { CodeMode.isCodeLayout(it.mainLayoutName()) }
+                .forEach { SubtypeSettings.removeEnabledSubtype(context, it) }
+        }
+        prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, enabled).apply()
+    }
+
+    /** the «</>» action in the expandable toolbar: into the code layout and back. */
     fun toggle(ime: LatinIME) {
+        val prefs = ime.prefs()
+        if (!prefs.getBoolean(PREF_CODE_LAYOUTS_ENABLED, false)) {
+            Toast.makeText(ime, "Сначала включите программные раскладки в настройках", Toast.LENGTH_LONG).show()
+            return
+        }
         val rim = RichInputMethodManager.getInstance()
         val cur = rim.currentSubtype
         val cyr = rim.currentSubtypeLocale.script() == ScriptUtils.SCRIPT_CYRILLIC
         val target = targetLayout(cur.mainLayoutName, cyr)
-        val prefs = ime.prefs()
         if (target != null) {
             val s = findOrAdd(prefs, target) ?: findOrAdd(prefs, CodeMode.LAYOUT_LATIN) ?: return
             previous = cur.rawSubtype

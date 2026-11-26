@@ -137,14 +137,15 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    val default = listOf(SETTINGS, EMOJI, VOICE, VOICE_RECORDER, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
+    // CODE is available in the expandable toolbar, never pinned beside the live suggestions.
+    val default = listOf(SETTINGS, EMOJI, VOICE, VOICE_RECORDER, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT, CODE)
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }
 }
 
 /** Klaviatura 1.4.0: main keys are always visible on the suggestion strip (no need to open the toolbar) */
-val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, CODE) // recorder stays in the expandable toolbar so it cannot crowd word suggestions
+val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE) // CODE and recorder stay in the expandable toolbar
 val defaultPinnedToolbarPref = (defaultPinnedKeys + entries.filterNot { it == CLOSE_HISTORY || it in defaultPinnedKeys })
     .joinToString(Separators.ENTRY) { it.name + Separators.KV + (it in defaultPinnedKeys) }
 

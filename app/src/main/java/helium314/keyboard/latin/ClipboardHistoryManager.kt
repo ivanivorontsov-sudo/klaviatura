@@ -558,7 +558,7 @@ class ClipboardHistoryManager(
             return
         }
         Toast.makeText(latinIME,
-            "Распознаю локально. При первом запуске загружу языковые модели (~8 МБ); потом можно без сети.",
+            "Распознаю локально. При первом запуске загружу более точные модели русского и английского (~30 МБ); потом можно без сети.",
             Toast.LENGTH_LONG).show()
         ru.klaviatura.clip.ScreenshotOcr.recognize(latinIME, file) { text, error ->
             screenshotOcrBusy.set(false)
