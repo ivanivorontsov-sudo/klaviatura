@@ -50,21 +50,26 @@ object CodeLayoutSwitch {
         return wanted.filter { it !in enabledLayouts }
     }
 
-    /** one-time, on update: enable the layouts (never removing the user's own) and pin the «</>» key */
+    /**
+     * One-time migration: preserve programming layouts that an existing user already has,
+     * but do not add them automatically. Move the CODE action from the pinned row to the
+     * expandable toolbar so the suggestion strip keeps its space.
+     */
     fun migrate(prefs: SharedPreferences) {
-        if (prefs.getBoolean(PREF_DONE, false)) return
+        if (prefs.getBoolean(PREF_MIGRATION_V2, false)) return
         try {
-            enableLayouts(prefs)
-            prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let {
-                prefs.edit().putString(Settings.PREF_PINNED_TOOLBAR_KEYS, pinCodeKey(it)).apply()
+            if (!prefs.contains(PREF_CODE_LAYOUTS_ENABLED)) {
+                val alreadyEnabled = SubtypeSettings.getEnabledSubtypes(true)
+                    .any { CodeMode.isCodeLayout(it.mainLayoutName()) }
+                prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, alreadyEnabled).apply()
             }
-            prefs.getString(Settings.PREF_TOOLBAR_KEYS, null)?.let {
-                prefs.edit().putString(Settings.PREF_TOOLBAR_KEYS, pinCodeKey(it)).apply()
+            prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let {
+                prefs.edit().putString(Settings.PREF_PINNED_TOOLBAR_KEYS, unpinCodeKey(it)).apply()
             }
         } catch (e: Throwable) {
             android.util.Log.w("KlCode", "code layout migration", e)
         }
-        prefs.edit().putBoolean(PREF_DONE, true).apply()
+        prefs.edit().putBoolean(PREF_MIGRATION_V2, true).apply()
     }
 
     private fun enableLayouts(prefs: SharedPreferences) {
