@@ -174,12 +174,13 @@ class VoiceRecorderActivity : Activity() {
         }
 
         files.forEach { file ->
+            val density = resources.displayMetrics.density
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(10, 8, 10, 8)
+                setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
                 background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(0x14000000)
-                    cornerRadius = 10 * resources.displayMetrics.density
+                    setColor(0xFFECECF0.toInt())
+                    cornerRadius = 12 * density
                 }
             }
             val sizeMb = file.length() / 1_048_576.0
@@ -187,17 +188,31 @@ class VoiceRecorderActivity : Activity() {
             val info = TextView(this).apply {
                 text = "${file.name}\n${formatDuration(duration)} · %.1f МБ".format(sizeMb)
                 textSize = 14f
+                setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground))
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, 0, 0, (8 * density).toInt())
             }
             card.addView(info, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             val actions = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val firstRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            actions.addView(libraryButton("▶ Слушать") { playFile(file) })
-            actions.addView(libraryButton("Текст") { transcribeFile(file) })
-            actions.addView(libraryButton("Обрезать") { showTrimDialog(file) })
-            actions.addView(libraryButton("Отправить") { KeyboardAudioRecorder.shareFile(this@VoiceRecorderActivity, file) })
-            actions.addView(libraryButton("Удалить") { confirmDelete(file) })
+            firstRow.addView(libraryButton("▶ Слушать") { playFile(file) }, actionButtonParams(1f))
+            firstRow.addView(libraryButton("Текст") { transcribeFile(file) }, actionButtonParams(1f))
+            firstRow.addView(libraryButton("Обрезать") { showTrimDialog(file) }, actionButtonParams(1f))
+            val secondRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            secondRow.addView(libraryButton("Отправить") { KeyboardAudioRecorder.shareFile(this@VoiceRecorderActivity, file) }, actionButtonParams(1f))
+            secondRow.addView(libraryButton("Удалить") { confirmDelete(file) }, actionButtonParams(1f))
+            actions.addView(firstRow)
+            actions.addView(secondRow)
             card.addView(actions)
             recordingLibrary.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = (6 * resources.displayMetrics.density).toInt()
@@ -205,11 +220,21 @@ class VoiceRecorderActivity : Activity() {
         }
     }
 
+    private fun actionButtonParams(weight: Float) = LinearLayout.LayoutParams(
+        0, ViewGroup.LayoutParams.WRAP_CONTENT, weight
+    ).apply {
+        val margin = (3 * resources.displayMetrics.density).toInt()
+        setMargins(margin, margin, margin, margin)
+    }
+
     private fun libraryButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         textSize = 11f
         minWidth = 0
-        setPadding(5, 0, 5, 0)
+        minHeight = (42 * resources.displayMetrics.density).toInt()
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setPadding(2, 0, 2, 0)
         setOnClickListener { action() }
     }
 
