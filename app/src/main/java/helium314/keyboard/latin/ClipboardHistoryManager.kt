@@ -105,12 +105,27 @@ class ClipboardHistoryManager(
             if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled)
                 latinIME.tryShowClipboardSuggestion()
         }
+        scheduleScreenshotRefresh("start-input-view")
+    }
+
+    /**
+     * InputMethodService may hide and re-show the existing IME window when switching apps
+     * without a new editor/input-view start callback. Treat actual window visibility as a
+     * separate resume signal for screenshot imports.
+     */
+    fun onWindowShown() {
+        if (!latinIME.mSettings.current.mClipboardHistoryEnabled || clearingHistory) return
+        scheduleScreenshotRefresh("window-shown")
+    }
+
+    private fun scheduleScreenshotRefresh(trigger: String) {
+        if (destroyed || clearingHistory || !latinIME.mSettings.current.mClipboardHistoryEnabled) return
         val generation = historyClearGeneration
         // Some vendor galleries publish the screenshot row/file after the IME has already
-        // resumed. Retry on resume instead of relying only on ContentObserver notifications,
-        // which may be missed while the keyboard window is hidden.
+        // resumed. Retry on both input-view start and actual IME-window visibility.
         screenshotHandler.removeCallbacksAndMessages(screenshotResumeImportToken)
         val resumeStartedAt = android.os.SystemClock.uptimeMillis()
+        android.util.Log.i(TAG, "scheduling screenshot scan: trigger=$trigger")
         for (delay in longArrayOf(0L, 700L, 1800L, 4000L)) {
             screenshotHandler.postAtTime({
                 if (destroyed || clearingHistory || generation != historyClearGeneration
@@ -121,12 +136,11 @@ class ClipboardHistoryManager(
                         && clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
                 }
                 if (importedCount > 0) {
-                    // Crucially, a screenshot discovered on resume must reopen a queue that
-                    // the user previously dismissed; the observer path already did this.
                     reactivateScreenshotQueueForNewCapture(importedCount)
                     screenshotHandler.removeCallbacksAndMessages(screenshotResumeImportToken)
                 }
                 if (importedCount > 0 || delay == 4000L) {
+                    android.util.Log.i(TAG, "screenshot scan completed: trigger=$trigger delay=$delay imported=$importedCount")
                     mainHandler.post {
                         if (!destroyed && !clearingHistory && generation == historyClearGeneration
                                 && latinIME.mSettings.current.mClipboardHistoryEnabled)
