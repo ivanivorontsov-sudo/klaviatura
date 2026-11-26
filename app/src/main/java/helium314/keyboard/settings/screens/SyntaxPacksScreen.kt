@@ -61,6 +61,13 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         SyntaxPackManager.init(context)
+        // v1.5.26 could save the opt-in flag without registering/enabling the layouts.
+        // Reconcile the saved switch state against the subtypes declared in method.xml.
+        val savedCodeLayoutsEnabled = CodeLayoutSwitch.isEnabled(context)
+        if (savedCodeLayoutsEnabled) {
+            runCatching { CodeLayoutSwitch.setEnabled(context, true) }
+                .onFailure { status = "Не удалось подключить программные раскладки: " + (it.message ?: "ошибка") }
+        }
         codeLayoutsEnabled = CodeLayoutSwitch.isEnabled(context)
         refreshCatalog()
     }
