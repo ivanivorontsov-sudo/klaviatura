@@ -187,8 +187,12 @@ class ClipboardHistoryManager(
         if (clipData.itemCount == 0) return
         val description = clipData.description ?: return
         val timeStamp = ClipboardManagerCompat.getClipTimestamp(clipData)
+        var importedImageClip = false
         // Klaviatura 1.3.1: every item (gallery "copy" may put several images); image URIs are copied into app
-        // storage right away, since the grant to read them ends with the clip
+        // storage right away, since the grant to read them ends with the clip.
+        // Unlike MediaStore screenshot imports, this path used to save an image without notifying the
+        // screenshot suggestion queue. On Android/vendor screenshot UIs that place the capture directly
+        // on the primary clipboard, it appeared in History but never in the compact keyboard chip.
         for (i in 0 until clipData.itemCount) {
             val clipItem = clipData.getItemAt(i) ?: continue
             val uri = clipItem.uri
@@ -197,11 +201,31 @@ class ClipboardHistoryManager(
                     && maySaveFromUri(uri, latinIME)) {
                 val desc = if (uriType != null && !description.hasMimeType(uriType))
                     android.content.ClipDescription(description.label, arrayOf(uriType)) else description
-                clipboardDao?.addClipUri(timeStamp + i, false, uri!!, desc, latinIME)
+                val itemTimestamp = timeStamp + i
+                val isImage = ru.klaviatura.clip.ClipKind.isImage(
+                    uriType,
+                    (0 until desc.mimeTypeCount).map { desc.getMimeType(it) }
+                )
+                val alreadyStoredAtTimestamp = isImage && clipboardDao?.getAll().orEmpty().any { entry ->
+                    entry.timeStamp == itemTimestamp && entry.filename != null &&
+                        entry.mimeTypes?.any { it.startsWith("image/") } == true
+                }
+                val saved = clipboardDao?.addClipUri(itemTimestamp, false, uri!!, desc, latinIME) == true
+                if (saved && isImage && !alreadyStoredAtTimestamp) {
+                    importedImageClip = true
+                    Log.i(TAG, "saved image from primary clipboard: timestamp=$itemTimestamp mime=" + (uriType ?: "unknown"))
+                }
             } else if (i == 0 && (description.hasMimeType("text/*") || clipItem.text != null)) {
                 val content = clipItem.coerceToText(latinIME)
                 if (TextUtils.isEmpty(content)) return
                 clipboardDao?.addClip(timeStamp, false, content.toString())
+            }
+        }
+        if (importedImageClip) {
+            reactivateScreenshotQueueForNewCapture()
+            mainHandler.post {
+                if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                    latinIME.refreshScreenshotSuggestion()
             }
         }
     }
