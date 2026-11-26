@@ -180,4 +180,9 @@ object ClipKind {
         if (!descHasText) return true
         return textEmpty && scheme == "content"
     }
+
+    /** Image MIME type can be supplied by the URI resolver or only by ClipDescription. */
+    fun isImage(uriType: String?, descriptionMimeTypes: Iterable<String>): Boolean =
+        uriType?.startsWith("image/", ignoreCase = true) == true ||
+            descriptionMimeTypes.any { it.startsWith("image/", ignoreCase = true) }
 }
