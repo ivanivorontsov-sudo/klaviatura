@@ -262,7 +262,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                     return true
                 }
 
-                return if (toolbarContainer.visibility != VISIBLE && deltaY > 0 && dy < (-10).dpToPx(resources)) showMoreSuggestions()
+                return if (!isExternalSuggestionVisible && toolbarContainer.visibility != VISIBLE && deltaY > 0 && dy < (-10).dpToPx(resources)) showMoreSuggestions()
                 else false
             }
         }
