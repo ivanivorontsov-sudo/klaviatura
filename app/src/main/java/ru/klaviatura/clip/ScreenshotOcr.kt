@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
 
 /**
  * Offline screenshot/photo OCR. Language data is fetched once from the official
- * tessdata_fast repository; recognition itself never uploads the image.
+ * tessdata_best repository; recognition itself never uploads the image.
  *
  * Output contains both readable text and a machine-readable layout map with pixel
  * bounding boxes for every recognized line and word.
