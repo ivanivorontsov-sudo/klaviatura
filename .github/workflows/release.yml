@@ -102,6 +102,10 @@ jobs:
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             --target "$GITHUB_SHA" \
             --latest
+          # Remove the orphaned v1.5.23 draft left by the old duplicate create/push workflow.
+          if gh api "repos/$GITHUB_REPOSITORY/releases/459314118" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/459314118"
+          fi
       - name: Delete temporary release branch
         if: startsWith(github.ref, 'refs/heads/v')
         run: |
