@@ -536,7 +536,7 @@ class ClipboardHistoryManager(
         textView.text = "📷 Разрешить скриншоты в буфере"
         textView.setOnClickListener {
             ru.klaviatura.clip.Screenshots.markOffered(latinIME)
-            binding.root.isGone = true
+            removeClipboardSuggestion(suppressPrimary = false)
             try { latinIME.startActivity(android.content.Intent(latinIME, ru.klaviatura.clip.MediaPermissionActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
         }
