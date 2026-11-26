@@ -11,7 +11,7 @@ import helium314.keyboard.latin.utils.defaultToolbarPref
 import ru.klaviatura.code.CodeLayoutSwitch
 import ru.klaviatura.code.CodeMode
 
-/** 1.5.9: the programming layout must be reachable (enabled on update, «</>» toolbar key) */
+/** Programming layouts are opt-in; their shortcut lives in the expandable toolbar. */
 class CodeLayoutTest {
     @Test fun toggleGoesIntoCodeAndBack() {
         assertEquals(CodeMode.LAYOUT_RU, CodeLayoutSwitch.targetLayout("ru", true))
