@@ -801,6 +801,8 @@ New dictionary:
     <string name="settings_screen_about">About</string>
     <!-- version for about screen -->
     <string name="version">Version</string>
+    <!-- Kept as a default fallback for existing translations. -->
+    <string name="about_github_link">View on GitHub</string>
     <!-- original upstream project this customized keyboard is based on -->
     <string name="about_base_source">Original project: HeliBoard</string>
     <string name="about_base_source_description">Open the HeliBoard keyboard project this edition is based on</string>
