@@ -536,7 +536,7 @@ class ClipboardHistoryManager(
         textView.text = "📷 Разрешить скриншоты в буфере"
         textView.setOnClickListener {
             ru.klaviatura.clip.Screenshots.markOffered(latinIME)
-            binding.root.isGone = true
+            removeClipboardSuggestion(suppressPrimary = false)
             try { latinIME.startActivity(android.content.Intent(latinIME, ru.klaviatura.clip.MediaPermissionActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
         }
@@ -685,8 +685,9 @@ class ClipboardHistoryManager(
             latinIME.mHandler.postResumeSuggestions(false)
         }
         csv.isGone = true
-        // The text card has released the external suggestion strip; restore the screenshot
-        // queue in its own slot while keeping the three live word suggestions untouched.
+        // Release the dedicated clipboard slot; the latest screenshot chip is restored below.
+        latinIME.setClipboardSuggestionView(null)
+        clipboardSuggestionView = null
         mainHandler.post { if (!destroyed) latinIME.refreshScreenshotSuggestion() }
     }
 

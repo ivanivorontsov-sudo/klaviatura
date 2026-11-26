@@ -2016,12 +2016,15 @@ public class LatinIME extends InputMethodService implements
     public boolean tryShowClipboardSuggestion() {
         if (!hasSuggestionStripView()) return false;
         View clipboardView = mClipboardHistoryManager.getClipboardSuggestionView(getCurrentInputEditorInfo(), mSuggestionStripView);
-        if (clipboardView != null) {
-            mSuggestionStripView.setInlineSuggestionView(null);
-            mSuggestionStripView.setExternalSuggestionView(clipboardView, false);
-            return true;
+        mSuggestionStripView.setClipboardSuggestionView(clipboardView);
+        return clipboardView != null;
+    }
+
+    /** Update the independent clipboard slot without replacing dictionary predictions. */
+    public void setClipboardSuggestionView(final View view) {
+        if (hasSuggestionStripView()) {
+            mSuggestionStripView.setClipboardSuggestionView(view);
         }
-        return false;
     }
 
     /** Refresh only the screenshot chip; the current word suggestions stay intact. */
