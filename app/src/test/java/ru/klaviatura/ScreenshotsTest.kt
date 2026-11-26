@@ -40,4 +40,11 @@ class ScreenshotsTest {
             Screenshots.effectiveTimestamp(now, 1_799_999_500L, 1_900_000_000_000L, 789L)
         )
     }
+    @Test fun successfulResumeImportReopensDismissedScreenshotQueue() {
+        assertTrue(Screenshots.keepQueueDismissed(wasDismissed = true, importedCount = 0))
+        assertFalse(Screenshots.keepQueueDismissed(wasDismissed = true, importedCount = 1))
+        assertFalse(Screenshots.keepQueueDismissed(wasDismissed = true, importedCount = 3))
+        assertFalse(Screenshots.keepQueueDismissed(wasDismissed = false, importedCount = 0))
+    }
+
 }
