@@ -145,7 +145,7 @@ val defaultToolbarPref by lazy {
 }
 
 /** Klaviatura 1.4.0: main keys are always visible on the suggestion strip (no need to open the toolbar) */
-val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE, CODE) // recorder stays in the expandable toolbar so it cannot crowd word suggestions
+val defaultPinnedKeys = listOf(CLIPBOARD, EMOJI, VOICE) // CODE and recorder stay in the expandable toolbar
 val defaultPinnedToolbarPref = (defaultPinnedKeys + entries.filterNot { it == CLOSE_HISTORY || it in defaultPinnedKeys })
     .joinToString(Separators.ENTRY) { it.name + Separators.KV + (it in defaultPinnedKeys) }
 
