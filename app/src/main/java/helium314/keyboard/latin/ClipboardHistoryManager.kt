@@ -635,6 +635,11 @@ class ClipboardHistoryManager(
 
     /** Restore legacy batch-closed entries when a fresh screenshot arrives. */
     private fun reactivateScreenshotQueueForNewCapture(importedCount: Int = 1) {
+        // A fresh capture always takes the preview slot, even if an older image was pinned.
+        // Older captures remain in history and become available after the newest one is used.
+        screenshotQueuePinnedEntry = null
+        screenshotSuggestionView = null
+        screenshotSuggestionFilename = null
         val prefs = latinIME.prefs()
         val wasDismissed = prefs.getBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, false)
         val legacyCutoff = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
