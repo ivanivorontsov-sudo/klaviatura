@@ -1,4 +1,4 @@
-name: Build signed update APK
+name: Build signed update APK (artifact only)
 
 on:
   push:
@@ -72,23 +72,8 @@ jobs:
       - name: Upload signed update APK
         uses: actions/upload-artifact@v4
         with:
-          name: Klaviatura-update-v1.5.19
+          name: Klaviatura-update
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.5.19
-          target_commitish: main
-          name: Клавиатура v1.5.19
-          body: |
-            ## Клавиатура v1.5.19
-
-            - Исправлено окно OCR: компактный диалог больше не занимает область панели подсказок и корректно привязывается к окну клавиатуры.
-            - Сохранена очередь скриншотов: текущий результат можно оставить, перейти к следующему изображению или закрыть очередь.
-            - После обработки изображения следующий скриншот показывается последовательно, без потери оригиналов из истории.
-            - Сборка проходит unit-тесты, проверку JNI и проверку release-подписи APK.
-            - APK подписан штатным ключом проекта для установки поверх предыдущей версии.
-          files: app/build/outputs/apk/release/*.apk
