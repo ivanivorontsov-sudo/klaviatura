@@ -70,6 +70,7 @@ class ClipboardHistoryManager(
     private val screenshotWorker = android.os.HandlerThread("KlaviaturaScreenshotImport").apply { start() }
     private val screenshotHandler = android.os.Handler(screenshotWorker.looper)
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val screenshotResumeImportToken = Any()
 
     fun onCreate() {
         clipboardManager = latinIME.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -105,18 +106,34 @@ class ClipboardHistoryManager(
                 latinIME.tryShowClipboardSuggestion()
         }
         val generation = historyClearGeneration
-        screenshotHandler.post {
-            // Import historical screenshots without replacing the active suggestions.
-            ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
-                !destroyed && !clearingHistory && generation == historyClearGeneration
-                    && latinIME.mSettings.current.mClipboardHistoryEnabled
-                    && clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
-            }
-            mainHandler.post {
-                if (!destroyed && !clearingHistory && generation == historyClearGeneration
-                        && latinIME.mSettings.current.mClipboardHistoryEnabled)
-                    latinIME.refreshScreenshotSuggestion()
-            }
+        // Some vendor galleries publish the screenshot row/file after the IME has already
+        // resumed. Retry on resume instead of relying only on ContentObserver notifications,
+        // which may be missed while the keyboard window is hidden.
+        screenshotHandler.removeCallbacksAndMessages(screenshotResumeImportToken)
+        val resumeStartedAt = android.os.SystemClock.uptimeMillis()
+        for (delay in longArrayOf(0L, 700L, 1800L, 4000L)) {
+            screenshotHandler.postAtTime({
+                if (destroyed || clearingHistory || generation != historyClearGeneration
+                        || !latinIME.mSettings.current.mClipboardHistoryEnabled) return@postAtTime
+                val importedCount = ru.klaviatura.clip.Screenshots.importRecent(latinIME) { uri, ts, desc ->
+                    !destroyed && !clearingHistory && generation == historyClearGeneration
+                        && latinIME.mSettings.current.mClipboardHistoryEnabled
+                        && clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
+                }
+                if (importedCount > 0) {
+                    // Crucially, a screenshot discovered on resume must reopen a queue that
+                    // the user previously dismissed; the observer path already did this.
+                    reactivateScreenshotQueueForNewCapture(importedCount)
+                    screenshotHandler.removeCallbacksAndMessages(screenshotResumeImportToken)
+                }
+                if (importedCount > 0 || delay == 4000L) {
+                    mainHandler.post {
+                        if (!destroyed && !clearingHistory && generation == historyClearGeneration
+                                && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                            latinIME.refreshScreenshotSuggestion()
+                    }
+                }
+            }, screenshotResumeImportToken, resumeStartedAt + delay)
         }
     }
 
@@ -575,8 +592,9 @@ class ClipboardHistoryManager(
     }
 
     /** Restore legacy batch-closed entries when a fresh screenshot arrives. */
-    private fun reactivateScreenshotQueueForNewCapture() {
+    private fun reactivateScreenshotQueueForNewCapture(importedCount: Int = 1) {
         val prefs = latinIME.prefs()
+        val wasDismissed = prefs.getBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, false)
         val legacyCutoff = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
         val editor = prefs.edit()
         if (legacyCutoff > 0L) {
@@ -593,7 +611,10 @@ class ClipboardHistoryManager(
             editor.putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed)
                 .remove(PREF_DISMISSED_IMAGE_TIMESTAMP)
         }
-        editor.putBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, false).apply()
+        editor.putBoolean(
+            PREF_SCREENSHOT_QUEUE_DISMISSED,
+            ru.klaviatura.clip.Screenshots.keepQueueDismissed(wasDismissed, importedCount)
+        ).apply()
     }
 
     private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
