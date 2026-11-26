@@ -3,6 +3,7 @@ on:
   push:
     branches: ['v*']
     tags: ['v*']
+  create:
   pull_request:
     branches: [main]
     paths:
@@ -14,6 +15,8 @@ on:
 permissions: { contents: write }
 jobs:
   build:
+    # A create event is only a release trigger for an explicitly versioned v* branch.
+    if: github.event_name != 'create' || startsWith(github.ref, 'refs/heads/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
