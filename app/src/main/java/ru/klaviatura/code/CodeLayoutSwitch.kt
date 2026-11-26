@@ -114,7 +114,6 @@ object CodeLayoutSwitch {
         val cur = rim.currentSubtype
         val cyr = rim.currentSubtypeLocale.script() == ScriptUtils.SCRIPT_CYRILLIC
         val target = targetLayout(cur.mainLayoutName, cyr)
-        val prefs = ime.prefs()
         if (target != null) {
             val s = findOrAdd(prefs, target) ?: findOrAdd(prefs, CodeMode.LAYOUT_LATIN) ?: return
             previous = cur.rawSubtype
