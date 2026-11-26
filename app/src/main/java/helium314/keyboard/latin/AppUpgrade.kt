@@ -58,7 +58,7 @@ fun checkVersionUpgrade(context: Context) {
     if (oldVersion != BuildConfig.VERSION_CODE)
         AppUpgrade.onUpgrade(context)
     ru.klaviatura.emoji.EmojiDefaultsMigration.run(prefs)
-    ru.klaviatura.code.CodeLayoutSwitch.migrate(prefs)
+    ru.klaviatura.code.CodeLayoutSwitch.migrate(context)
 }
 
 fun transferOldPinnedClips(context: Context) {
