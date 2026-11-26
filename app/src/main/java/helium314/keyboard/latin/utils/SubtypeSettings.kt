@@ -63,7 +63,11 @@ object SubtypeSettings {
         if (newSubtype !in enabledSubtypes) {
             enabledSubtypes.add(newSubtype)
             enabledSubtypes.sortBy { it.locale().toLanguageTag() } // for consistent order
-            RichInputMethodManager.getInstance().refreshSubtypeCaches()
+            // Settings can be opened directly from Android Settings before the IME service
+            // initializes RichInputMethodManager. Persist the subtype either way; refresh
+            // the runtime cache when the service is already active.
+            if (RichInputMethodManager.isInitialized())
+                RichInputMethodManager.getInstance().refreshSubtypeCaches()
         }
     }
 
