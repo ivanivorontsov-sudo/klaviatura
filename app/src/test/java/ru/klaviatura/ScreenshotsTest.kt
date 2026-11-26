@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.klaviatura.clip.Screenshots
+import ru.klaviatura.clip.ClipKind
 
 class ScreenshotsTest {
     @Test fun recognizesCommonScreenshotDirectoriesAndNames() {
@@ -45,6 +46,20 @@ class ScreenshotsTest {
         assertFalse(Screenshots.keepQueueDismissed(wasDismissed = true, importedCount = 1))
         assertFalse(Screenshots.keepQueueDismissed(wasDismissed = true, importedCount = 3))
         assertFalse(Screenshots.keepQueueDismissed(wasDismissed = false, importedCount = 0))
+    }
+
+    @Test fun primaryClipboardImageIsDetectedFromUriOrDescriptionMimeType() {
+        assertTrue(ClipKind.isImage("image/jpeg", listOf("text/plain")))
+        assertTrue(ClipKind.isImage(null, listOf("image/png")))
+        assertTrue(ClipKind.isImage("IMAGE/WEBP", listOf("text/plain")))
+        assertFalse(ClipKind.isImage("application/pdf", listOf("application/pdf")))
+        assertFalse(ClipKind.isImage(null, listOf("text/plain")))
+    }
+
+    @Test fun newestScreenshotWinsAndHigherIdBreaksTimestampTies() {
+        assertTrue(Screenshots.compareCaptureOrder(200L, 2L, 100L, 99L) > 0)
+        assertTrue(Screenshots.compareCaptureOrder(200L, 3L, 200L, 2L) > 0)
+        assertTrue(Screenshots.compareCaptureOrder(100L, 1L, 200L, 2L) < 0)
     }
 
 }
