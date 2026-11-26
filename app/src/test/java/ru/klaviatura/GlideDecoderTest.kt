@@ -166,6 +166,20 @@ class GlideDecoderTest {
         assertTop("ab", result)
     }
 
+    @Test fun aShortPrefixDoesNotCountTheNextNearbyKey() {
+        val keys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 200f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 100_000L) }
+        // The finger moves only one quarter of the distance to 'b'. The broad proximity
+        // radius alone must not fabricate the second letter.
+        val xs = IntArray(64) { 100 + it * 25 / 63 }
+        val ys = IntArray(64) { 100 }
+        val result = GlideDecoder(keys).decode(xs, ys, xs.size, listOf(lex to 0.0)).map { it.word }
+        assertTrue("a short prefix must not decode as 'ab': $result", "ab" !in result)
+    }
+
     @Test fun ruWordsWithYo() {
         assertTop("ещё".replace('ё', 'е').let { if (ru.contains("ещё")) "ещё" else it },
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)

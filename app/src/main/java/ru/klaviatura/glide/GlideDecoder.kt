@@ -475,8 +475,8 @@ class GlideDecoder(val keys: List<GKey>) {
                         }
                         val d = near[ki]
                         if (d > nearLim) { ok = false; break }
-                        // Don't let one sampled point satisfy two different nearby keys.
-                        // Require a small amount of forward path movement between distinct letters.
+                        // Don't let the broad key-radius overlap satisfy two nearby letters.
+                        // Require meaningful forward travel before the next distinct key is eligible.
                         val searchFrom = if (m == 0) at else {
                             val previousKey = seq[m - 1]
                             val separation = dist(kux[previousKey], kuy[previousKey], kux[ki], kuy[ki])
@@ -767,7 +767,7 @@ class GlideDecoder(val keys: List<GKey>) {
         const val CTX_W = 0.6
         const val CROSS_PENALTY = 0.45
         private const val LONG_WORD_RARE_PENALTY_SCALE = 0.35
-        private const val MIN_PATH_PROGRESS_FRACTION = 0.25f
+        private const val MIN_PATH_PROGRESS_FRACTION = 0.55f
 
         fun segDist(x: Float, y: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
             val vx = bx - ax; val vy = by - ay; val l2 = vx * vx + vy * vy
