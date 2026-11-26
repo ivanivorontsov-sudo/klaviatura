@@ -1393,6 +1393,12 @@ public class LatinIME extends InputMethodService implements
             setNavigationBarColor();
             workaroundForHuaweiStatusBarIssue();
 
+            // The existing input view may only be hidden/shown when switching apps;
+            // onStartInputView is not guaranteed to run again for the same editor.
+            // Re-scan screenshots and refresh the clipboard queue at the actual window-show event.
+            try { mClipboardHistoryManager.onWindowShown(); }
+            catch (Throwable e) { Log.w(TAG, "screenshot refresh on IME window show failed", e); }
+
             // Switching apps hides the IME window and cancels pending suggestion callbacks.
             // Rebuild suggestions when the same editor becomes visible again, even if the
             // cursor did not move and the app sends no further selection callback.
