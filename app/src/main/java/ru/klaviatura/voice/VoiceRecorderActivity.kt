@@ -27,6 +27,7 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import helium314.keyboard.latin.R
 import java.io.File
@@ -133,10 +134,17 @@ class VoiceRecorderActivity : Activity() {
             WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(page)
         ViewCompat.setOnApplyWindowInsetsListener(page) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(view.paddingLeft, systemBars.top, view.paddingRight, systemBars.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(
+                view.paddingLeft,
+                systemBars.top,
+                view.paddingRight,
+                maxOf(systemBars.bottom, ime.bottom)
+            )
             insets
         }
         ViewCompat.requestApplyInsets(page)
