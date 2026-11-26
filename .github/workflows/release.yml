@@ -1,6 +1,7 @@
 name: release
 on:
   push:
+    branches: ['v*']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -38,11 +39,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          target_commitish: main
+          target_commitish: ${{ github.sha }}
           name: Клавиатура ${{ github.ref_name }}
           body: |
             ## Клавиатура ${{ github.ref_name }}
@@ -60,3 +61,6 @@ jobs:
             - Внутренние экраны импорта и настройки не создают лишние карточки в списке недавних задач.
             - APK собирается с release-подписью; перед публикацией выполняются unit-тесты и проверка JNI.
           files: app/build/outputs/apk/release/*.apk
+      - name: Delete temporary release branch
+        if: startsWith(github.ref, 'refs/heads/v')
+        run: git push origin --delete "$GITHUB_REF_NAME"
