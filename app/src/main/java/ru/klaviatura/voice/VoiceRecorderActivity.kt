@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -23,7 +24,11 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.ScrollView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import helium314.keyboard.latin.R
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -51,10 +56,19 @@ class VoiceRecorderActivity : Activity() {
         language = VoiceInput.currentLang().takeIf { VoiceInput.supported(it) } ?: "ru"
         title = "Голосовые инструменты"
 
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 18, 24, 18)
+            setPadding(dp(18), dp(12), dp(18), dp(16))
             gravity = Gravity.CENTER_HORIZONTAL
+        }
+        val pageTitle = TextView(this).apply {
+            text = title
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.foreground))
+            setPadding(0, 0, 0, dp(10))
         }
         status = TextView(this).apply {
             text = "Записи хранятся локально на устройстве"
@@ -98,22 +112,34 @@ class VoiceRecorderActivity : Activity() {
         }
         val close = Button(this).apply { text = "Закрыть"; setOnClickListener { finish() } }
 
+        root.addView(pageTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         listOf(status, libraryTitle, recordingLibrary, recordButton, play, share, choose, transcribeButton, transcript, insert, close).forEach { view ->
             root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
 
-        // Do not let the transcript EditText steal initial focus and scroll the page
-        // down to the bottom when the voice tools screen opens.
+        // The screen uses the app's no-ActionBar theme. Apply system insets explicitly so
+        // edge-to-edge layouts never draw the first recording beneath the status bar.
         root.isFocusableInTouchMode = true
         root.isFocusable = true
         val page = ScrollView(this).apply {
             isFillViewport = true
             isFocusableInTouchMode = true
             descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+            clipToPadding = true
+            setBackgroundColor(ContextCompat.getColor(this@VoiceRecorderActivity, R.color.setup_background))
             addView(root)
         }
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
         setContentView(page)
+        ViewCompat.setOnApplyWindowInsetsListener(page) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(view.paddingLeft, systemBars.top, view.paddingRight, systemBars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(page)
         page.post {
             transcript.clearFocus()
             page.requestFocus()
