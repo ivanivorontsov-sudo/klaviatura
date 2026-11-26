@@ -55,13 +55,17 @@ object CodeLayoutSwitch {
      * but do not add them automatically. Move the CODE action from the pinned row to the
      * expandable toolbar so the suggestion strip keeps its space.
      */
-    fun migrate(prefs: SharedPreferences) {
+    fun migrate(context: Context) {
+        val prefs = context.prefs()
         if (prefs.getBoolean(PREF_MIGRATION_V2, false)) return
         try {
             if (!prefs.contains(PREF_CODE_LAYOUTS_ENABLED)) {
-                val alreadyEnabled = SubtypeSettings.getEnabledSubtypes(true)
-                    .any { CodeMode.isCodeLayout(it.mainLayoutName()) }
-                prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, alreadyEnabled).apply()
+                // Previous versions enabled these layouts automatically. Make the new feature
+                // genuinely opt-in for everyone, including existing installations.
+                SubtypeSettings.getEnabledSubtypes(true)
+                    .filter { CodeMode.isCodeLayout(it.mainLayoutName()) }
+                    .forEach { SubtypeSettings.removeEnabledSubtype(context, it) }
+                prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, false).apply()
             }
             prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, null)?.let {
                 prefs.edit().putString(Settings.PREF_PINNED_TOOLBAR_KEYS, unpinCodeKey(it)).apply()
