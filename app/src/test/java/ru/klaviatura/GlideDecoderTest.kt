@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import ru.klaviatura.glide.GKey
 import ru.klaviatura.glide.GlideDecoder
+import ru.klaviatura.glide.GlideEngine
 import ru.klaviatura.glide.Lexicon
 import ru.klaviatura.glide.CrossLayout
 import java.io.File
@@ -108,13 +109,120 @@ class GlideDecoderTest {
         assertTop("hello", r, 5)
     }
 
+    @Test fun latinBrandWordsAreSwipeableOnRussianLayout() {
+        val brands = Lexicon.parse("en", findAsset("en_extra.tsv").readLines().asSequence())
+        val lexicons = listOf(ru to 0.0, brands to 0.3)
+        for (word in listOf("realme", "samsung", "xiaomi", "huawei", "oneplus")) {
+            assertTrue("brand lexicon missing $word", brands.contains(word))
+            val points = wordPoints(jcuken, word) { CrossLayout.latToCyr[it]!! }
+            assertTop(word, decode(jcuken, points, lexicons).map { it.lowercase() }, 3)
+        }
+    }
+
+    @Test fun builtInRussianSlangDictionaryContainsSwipeableTerms() {
+        val slang = Lexicon.parse("ru", findAsset("ru_slang.tsv").readLines().asSequence())
+        for (word in listOf("вайб", "кринж", "имба", "зашквар", "чилить")) {
+            assertTrue("built-in slang dictionary missing $word", slang.contains(word))
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(slang to 0.0)), 3)
+        }
+    }
+
+    @Test fun longRussianInflectionsAreInBuiltInPriorityLexicon() {
+        val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
+        for (word in listOf("перспективно", "лимитов", "перспективный", "лимитами")) {
+            assertTrue("priority lexicon missing $word", priority.contains(word))
+            assertTop(word, decode(jcuken, wordPoints(jcuken, word), listOf(priority to 0.0)), 2)
+        }
+    }
+
+    @Test fun longRareWordsSurviveARealisticNoisySwipe() {
+        val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
+        val targets = listOf(
+            "перспективно", "достопримечательность", "непредсказуемость",
+            "производительностью", "электротехнический", "распознавание",
+            "переписывались", "вскарабкался", "въедливый", "абрикосовый",
+            "шпаргалка", "свайпнуть", "выхухоль"
+        )
+        for (word in targets) {
+            assertTrue("priority lexicon missing $word", priority.contains(word))
+            val (x, y) = GlideBenchTest.gesture(
+                GlideBenchTest.ru11, word, kotlin.random.Random(word.hashCode()), sigma = 0.18f
+            )
+            val decoded = GlideDecoder(GlideBenchTest.ru11)
+                .decode(x, y, x.size, listOf(priority to 0.0))
+                .map { it.word.replace('ё', 'е') }
+            assertTrue("expected '$word' in top 3, got ${decoded.take(5)}",
+                decoded.take(3).contains(word.replace('ё', 'е')))
+        }
+    }
+
+    @Test fun aMovingTraceCanDistinguishVeryCloseAdjacentKeys() {
+        val closeKeys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 115f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 100_000L) }
+        val xs = IntArray(64) { 100 + it * 15 / 63 }
+        val ys = IntArray(64) { 100 }
+        val result = GlideDecoder(closeKeys).decode(xs, ys, xs.size, listOf(lex to 0.0)).map { it.word }
+        assertTop("ab", result)
+    }
+
+    @Test fun aShortPrefixDoesNotCountTheNextNearbyKey() {
+        val keys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 200f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 100_000L) }
+        // The finger moves only one quarter of the distance to 'b'. The broad proximity
+        // radius alone must not fabricate the second letter.
+        val xs = IntArray(64) { 100 + it * 25 / 63 }
+        val ys = IntArray(64) { 100 }
+        val result = GlideDecoder(keys).decode(xs, ys, xs.size, listOf(lex to 0.0)).map { it.word }
+        assertTrue("a short prefix must not decode as 'ab': $result", "ab" !in result)
+    }
+
     @Test fun ruWordsWithYo() {
         assertTop("ещё".replace('ё', 'е').let { if (ru.contains("ещё")) "ещё" else it },
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)
+    }
+
+    @Test fun onePointCannotSatisfyTwoVeryCloseLetters() {
+        val closeKeys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 110f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 10_000L) }
+        val xs = IntArray(32) { 105 }
+        val ys = IntArray(32) { 100 }
+        val result = GlideDecoder(closeKeys).decode(xs, ys, xs.size, listOf(lex to 0.0))
+        assertTrue("a stationary trace must not decode as two adjacent letters", result.none { it.word == "ab" })
+    }
+
+    @Test fun longWordsHaveASeparateFrequencyIndependentIndex() {
+        val lex = Lexicon("ru").apply {
+            add("мама", 1_000_000L)
+            add("перспективно", 1L)
+        }
+        val longList = lex.byLongFirst['п']
+        assertTrue("long-word index must include rare forms", longList != null &&
+            (0 until longList.n).any { lex.word(longList.a[it]) == "перспективно" })
     }
 
     @Test fun trimmingAllNonLetterGivesNothing() {
         val (x, y) = path(listOf(GLOBE, SPACE))
         assertEquals(0, GlideDecoder(jcuken).decode(x, y, x.size, listOf(ru to 0.0)).size)
     }
+
+    @Test fun nextWordPredictionsStayInThePreviousWordsScript() {
+        assertEquals(
+            listOf("мир", "друг"),
+            GlideEngine.filterByContextScript("привет", listOf("мир", "world", "друг", "phone"))
+        )
+        assertEquals(
+            listOf("world"),
+            GlideEngine.filterByContextScript("hello", listOf("world", "мир"))
+        )
+    }
+
 }

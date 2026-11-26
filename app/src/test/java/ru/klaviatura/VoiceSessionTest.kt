@@ -132,4 +132,10 @@ class VoiceSessionTest {
         val edit = ru.klaviatura.voice.VoiceEditCommands.parse("Старый текст", "напиши заново Новый текст")!!
         assertEquals("Новый текст", edit.replacement)
     }
+
+    @Test fun spokenPunctuationIsConvertedToSymbols() {
+        assertEquals(".", VoiceText.format("точка", "ru", commands = true))
+        assertEquals(",", VoiceText.format("запятая", "ru", commands = true))
+    }
+
 }

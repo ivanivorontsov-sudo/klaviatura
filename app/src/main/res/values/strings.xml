@@ -801,8 +801,14 @@ New dictionary:
     <string name="settings_screen_about">About</string>
     <!-- version for about screen -->
     <string name="version">Version</string>
-    <!-- github repo link for about screen -->
+    <!-- Kept as a default fallback for existing translations. -->
     <string name="about_github_link">View on GitHub</string>
+    <!-- original upstream project this customized keyboard is based on -->
+    <string name="about_base_source">Original project: HeliBoard</string>
+    <string name="about_base_source_description">Open the HeliBoard keyboard project this edition is based on</string>
+    <!-- source repository for this customized edition -->
+    <string name="about_custom_version_source">Custom edition by Ivan Vorontsov</string>
+    <string name="about_custom_version_source_description">Source code and development of the Klaviatura customized edition</string>
     <!-- link to the wiki for about screen -->
     <string name="about_wiki_link">Go to Wiki</string>
     <!-- description for wiki link -->

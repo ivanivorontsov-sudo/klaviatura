@@ -75,7 +75,6 @@ fun AppearanceScreen(
         ru.klaviatura.bg.BgFx.PREF_DIM,
         "kl_reset_theme",
         "kl_emoji_suggest",
-        ru.klaviatura.emoji.GifPanel.PREF_KEY,
         R.string.settings_category_miscellaneous,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD,
         if (prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE, Defaults.PREF_ENABLE_SPLIT_KEYBOARD)
@@ -234,9 +233,6 @@ fun createAppearanceSettings(context: Context) = listOf(
     },
     Setting(context, "kl_emoji_suggest", R.string.kl_emoji_suggest, R.string.kl_emoji_suggest_summary) {
         helium314.keyboard.settings.preferences.SwitchPreference(it, true)
-    },
-    Setting(context, ru.klaviatura.emoji.GifPanel.PREF_KEY, R.string.kl_gif_key, R.string.kl_gif_key_summary) {
-        helium314.keyboard.settings.preferences.TextInputPreference(it, "", androidx.compose.ui.res.stringResource(R.string.kl_gif_key_summary))
     },
     Setting(context, "kl_bg_gen", R.string.kl_bg_gen, R.string.kl_bg_gen_summary) { s ->
         val ctx = LocalContext.current

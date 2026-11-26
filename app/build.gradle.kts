@@ -25,13 +25,11 @@ android {
 
 
     defaultConfig {
-        // optional GIF search key (KLIPY), from a CI secret / env; never committed
-        buildConfigField("String", "KLIPY_KEY", "\"" + (System.getenv("KLIPY_KEY") ?: "") + "\"")
         applicationId = "ru.ivanivorontsov.klaviatura"
         minSdk = 21
         targetSdk = 37
-        versionCode = 40
-        versionName = "1.5.18"
+        versionCode = 41
+        versionName = "1.5.19"
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("arm64-v8a"))

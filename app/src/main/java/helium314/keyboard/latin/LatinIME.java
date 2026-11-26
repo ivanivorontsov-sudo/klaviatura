@@ -561,6 +561,7 @@ public class LatinIME extends InputMethodService implements
         private boolean voiceSessionActive = false;
         private boolean writingVoiceText = false;
         private String lastRawPartial = "";
+        private String composingText = "";
         private String frozenPrefix = "";
         private android.view.inputmethod.InputConnection voiceConnection;
         private String voicePackageName;
@@ -621,6 +622,7 @@ public class LatinIME extends InputMethodService implements
             manualEditSinceVoice = false;
             writingVoiceText = false;
             lastRawPartial = "";
+            composingText = "";
             frozenPrefix = "";
             voiceSessionActive = true;
             expectedVoiceSelStart = mInputLogic.mConnection.getExpectedSelectionStart();
@@ -637,9 +639,11 @@ public class LatinIME extends InputMethodService implements
             if (!isCurrentVoiceEditor()) { voiceSessionActive = false; return; }
             if (!keepVoiceAtCurrentCaret()) return;
             final android.view.inputmethod.InputConnection ic = voiceConnection;
-            lastRawPartial = text;
             String partial = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
-            if (partial.isEmpty() && !composing) return;
+            lastRawPartial = text;
+            // A recognizer may briefly emit an empty partial around spoken punctuation.
+            // Keep the previous composition; the final result will replace it.
+            if (partial.isEmpty()) return;
             // Finish a manually typed composing word only after the user really edited this field.
             // Calling finishInput after every voice phrase operated on a stale editor cache/caret.
             if (!composing && manualEditSinceVoice) {
@@ -653,7 +657,8 @@ public class LatinIME extends InputMethodService implements
             }
             writingVoiceText = true;
             try {
-                composing = !partial.isEmpty() && ic.setComposingText(partial, 1);
+                composing = ic.setComposingText(partial, 1);
+                composingText = composing ? partial : "";
             } finally {
                 writingVoiceText = false;
             }
@@ -674,6 +679,7 @@ public class LatinIME extends InputMethodService implements
                 try { voiceConnection.finishComposingText(); }
                 finally { writingVoiceText = false; }
                 composing = false;
+                composingText = "";
                 frozenPrefix = lastRawPartial;
                 refreshVoiceCaches();
             }
@@ -690,7 +696,12 @@ public class LatinIME extends InputMethodService implements
             final android.view.inputmethod.InputConnection ic = voiceConnection;
             writingVoiceText = true;
             try {
-                if (composing) { ic.setComposingText("", 1); composing = false; }
+                if (composing) {
+                    // Preserve interim text before applying an explicit voice edit command.
+                    ic.finishComposingText();
+                    composing = false;
+                    composingText = "";
+                }
                 final android.view.inputmethod.ExtractedTextRequest request = new android.view.inputmethod.ExtractedTextRequest();
                 request.hintMaxChars = 50000;
                 request.hintMaxLines = 2000;
@@ -722,6 +733,7 @@ public class LatinIME extends InputMethodService implements
                     ic.commitText(edit.getReplacement(), 1);
                 } finally { ic.endBatchEdit(); }
                 lastRawPartial = "";
+                composingText = "";
                 frozenPrefix = "";
                 manualEditSinceVoice = false;
                 refreshVoiceCaches();
@@ -744,17 +756,65 @@ public class LatinIME extends InputMethodService implements
             writingVoiceText = true;
             try {
                 ic.beginBatchEdit();
-                if (composing) { ic.setComposingText("", 1); composing = false; }
-                CharSequence before = ic.getTextBeforeCursor(2, 0);
-                String t = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
-                boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
-                        || before.toString().trim().matches(".*[.!?]$");
-                if (sentenceStart && !t.isEmpty() && Character.isLetter(t.charAt(0)))
-                    t = Character.toUpperCase(t.charAt(0)) + t.substring(1);
-                if (before != null && before.length() > 0 && !Character.isWhitespace(before.charAt(before.length() - 1))
-                        && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0))) t = " " + t;
-                if (!t.isEmpty()) ic.commitText(t, 1);
-                ic.endBatchEdit();
+                try {
+                    CharSequence before = ic.getTextBeforeCursor(2, 0);
+                    // Exclude the interim ASR phrase when calculating spacing and sentence case.
+                    if (composing && !composingText.isEmpty()) {
+                        CharSequence context = ic.getTextBeforeCursor(composingText.length() + 2, 0);
+                        if (context != null && context.length() >= composingText.length()) {
+                            String snapshot = context.toString();
+                            if (snapshot.endsWith(composingText))
+                                before = snapshot.substring(0, snapshot.length() - composingText.length());
+                        }
+                    }
+                    String t = ru.klaviatura.voice.VoiceText.INSTANCE.afterCommittedPrefix(text, frozenPrefix);
+                    boolean sentenceStart = before == null || before.length() == 0 || before.toString().trim().isEmpty()
+                            || before.toString().trim().matches(".*[.!?]$");
+                    if (sentenceStart && !t.isEmpty() && Character.isLetter(t.charAt(0)))
+                        t = Character.toUpperCase(t.charAt(0)) + t.substring(1);
+                    boolean needsSpace = before != null && before.length() > 0
+                            && !Character.isWhitespace(before.charAt(before.length() - 1))
+                            && !t.isEmpty() && Character.isLetterOrDigit(t.charAt(0));
+                    String replacement = (needsSpace ? " " : "") + t;
+                    if (composing) {
+                        if (replacement.isEmpty()) {
+                            // No final characters to insert: simply retain and finish the partial.
+                            // Do not leave the interim phrase selected in the editor.
+                            ic.finishComposingText();
+                        } else {
+                            // Do not use setComposingText for finalization on third-party editors.
+                            // Select only the exact interim span and commit into that selection.
+                            // If its bounds cannot be verified, finish it unchanged rather than
+                            // risk replacing the entire document in a vendor-specific text field.
+                            boolean replaced = false;
+                            if (!composingText.isEmpty() && expectedVoiceSelStart == expectedVoiceSelEnd) {
+                                final int end = expectedVoiceSelEnd;
+                                final int start = end - composingText.length();
+                                final CharSequence activeTail = ic.getTextBeforeCursor(composingText.length(), 0);
+                                if (start >= 0 && activeTail != null
+                                        && composingText.contentEquals(activeTail)
+                                        && ic.setSelection(start, end)) {
+                                    ic.commitText(replacement, 1);
+                                    replaced = true;
+                                }
+                            }
+                            if (!replaced) {
+                                ic.finishComposingText();
+                                android.widget.Toast.makeText(LatinIME.this,
+                                        "Не удалось безопасно заменить голосовой фрагмент; исходный текст сохранён.",
+                                        android.widget.Toast.LENGTH_LONG).show();
+                            } else {
+                                ic.finishComposingText();
+                            }
+                        }
+                        composing = false;
+                        composingText = "";
+                    } else if (!replacement.isEmpty()) {
+                        ic.commitText(replacement, 1);
+                    }
+                } finally {
+                    ic.endBatchEdit();
+                }
             } finally {
                 writingVoiceText = false;
             }
@@ -777,6 +837,7 @@ public class LatinIME extends InputMethodService implements
             composing = false;
             manualEditSinceVoice = false;
             lastRawPartial = "";
+            composingText = "";
             frozenPrefix = "";
             voiceSessionActive = false;
             voiceConnection = null;

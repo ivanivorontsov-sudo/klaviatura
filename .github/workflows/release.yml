@@ -1,33 +1,60 @@
 name: release
 on:
   push:
+    branches: ['v*']
     tags: ['v*']
+  create:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/src/main/java/**'
+      - 'app/src/main/assets/glide/**'
+      - 'app/src/main/assets/gif_stickers/**'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/release.yml'
 permissions: { contents: write }
 jobs:
   build:
+    # A create event is only a release trigger for an explicitly versioned v* branch.
+    if: github.event_name != 'create' || startsWith(github.ref, 'refs/heads/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
-      - run: echo "${{ secrets.KS_B64 }}" | base64 -d > $RUNNER_TEMP/ks.jks
+      - name: Prepare release signing key
+        shell: bash
+        run: printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/ks.jks"
+        env: { KS_B64: "${{ secrets.KS_B64 }}" }
       - name: Unit tests (свайп-декодер)
         run: ./gradlew --no-daemon :app:testDebugUnitTest --tests 'ru.klaviatura.*'
-      - run: ./gradlew --no-daemon assembleRelease
-        env: { KS_FILE: "${{ runner.temp }}/ks.jks", KS_PASS: "${{ secrets.KS_PASS }}", KS_ALIAS: klaviatura, KLIPY_KEY: "${{ secrets.KLIPY_KEY }}" }
+      - name: Assemble signed release APK
+        run: ./gradlew --no-daemon assembleRelease
+        env: { KS_FILE: "${{ runner.temp }}/ks.jks", KS_PASS: "${{ secrets.KS_PASS }}", KS_ALIAS: klaviatura }
       - name: Release sanity (R8 kept JNI fields)
         run: python3 ci/check_jni_fields.py app/build/outputs/apk/release/*.apk libs-dl/sherpa-onnx-*.aar
+      - name: Upload signed release-candidate APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klaviatura-release-candidate
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          target_commitish: main
+          target_commitish: ${{ github.sha }}
           name: Клавиатура ${{ github.ref_name }}
           body: |
             ## Клавиатура ${{ github.ref_name }}
-            - Крестик скрывает всю текущую пачку скриншотов; новый снимок снова включает предложение вставки.
-            - Скриншоты вынесены в отдельный слот и не очищают словесные подсказки.
+            - Крестик у скриншота скрывает всю ожидающую очередь, не удаляя историю; новый снимок снова включает очередь.
+            - Очередь вставляет снимки в порядке добавления, по одному; крестик в OCR-решении пропускает только текущий снимок.
+            - Скопированный текст получает приоритет над скриншотами; вставка или собственный крестик текста возвращают очередь.
+            - Карточка скриншота занимает отдельный слот и не затирает три словесные подсказки.
+            - Поиск длинных редких слов учитывает первую и последнюю буквы жеста; порядок близких клавиш требует реального продвижения пальца.
             - Голосовой ввод показывает раздельные состояния запуска микрофона и активной записи.
             - Словесные подсказки восстанавливаются после диктовки и корректно переживают сворачивание клавиатуры и переключение приложений.
             - Курсор и composing-кэш синхронизируются после ручного редактирования.
@@ -37,3 +64,6 @@ jobs:
             - Внутренние экраны импорта и настройки не создают лишние карточки в списке недавних задач.
             - APK собирается с release-подписью; перед публикацией выполняются unit-тесты и проверка JNI.
           files: app/build/outputs/apk/release/*.apk
+      - name: Delete temporary release branch
+        if: startsWith(github.ref, 'refs/heads/v')
+        run: git push origin --delete "$GITHUB_REF_NAME"

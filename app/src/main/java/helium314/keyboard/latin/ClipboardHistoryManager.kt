@@ -2,7 +2,6 @@
 
 package helium314.keyboard.latin
 
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -12,11 +11,14 @@ import android.provider.OpenableColumns
 import android.text.InputType
 import android.text.TextUtils
 import android.widget.Toast
+import android.graphics.Typeface
+import android.util.TypedValue
+import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isGone
@@ -51,7 +53,11 @@ class ClipboardHistoryManager(
     private var clipboardSuggestionView: View? = null
     private var screenshotSuggestionView: View? = null
     private var screenshotSuggestionFilename: String? = null
-    private var ocrDialog: AlertDialog? = null
+    /** The image stays selected until the user explicitly keeps it or advances the queue. */
+    private var screenshotQueuePinnedEntry: ClipboardHistoryEntry? = null
+    /** A small action bar inside the IME suggestion strip; never opens a separate window. */
+    private var screenshotOcrPromptEntry: ClipboardHistoryEntry? = null
+    private var screenshotOcrPromptView: View? = null
     private val screenshotOcrBusy = AtomicBoolean(false)
     private var clipboardDao: ClipboardDao? = null
     private var tempPrimaryClip = false
@@ -75,10 +81,13 @@ class ClipboardHistoryManager(
                 if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled) {
                     val generation = historyClearGeneration
                     val saved = clipboardDao?.addClipUri(ts, false, uri, desc, latinIME) == true
-                    if (saved) mainHandler.post {
+                    if (saved) {
+                        reactivateScreenshotQueueForNewCapture()
+                        mainHandler.post {
                         if (!destroyed && !clearingHistory && generation == historyClearGeneration
                                 && latinIME.mSettings.current.mClipboardHistoryEnabled)
                             latinIME.refreshScreenshotSuggestion()
+                        }
                     }
                     saved
                 } else false
@@ -91,6 +100,10 @@ class ClipboardHistoryManager(
     fun onStartInputView() {
         if (!latinIME.mSettings.current.mClipboardHistoryEnabled || clearingHistory) return
         fetchPrimaryClip()
+        if (getPrimaryClipIfText() != null) mainHandler.post {
+            if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                latinIME.tryShowClipboardSuggestion()
+        }
         val generation = historyClearGeneration
         screenshotHandler.post {
             // Import historical screenshots without replacing the active suggestions.
@@ -109,8 +122,9 @@ class ClipboardHistoryManager(
 
     fun onDestroy() {
         destroyed = true
-        ocrDialog?.dismiss()
-        ocrDialog = null
+        screenshotOcrPromptEntry = null
+        screenshotOcrPromptView = null
+        screenshotQueuePinnedEntry = null
         clipboardManager.removePrimaryClipChangedListener(this)
         screenshotObserver?.let { runCatching { latinIME.contentResolver.unregisterContentObserver(it) } }
         screenshotHandler.removeCallbacksAndMessages(null)
@@ -125,6 +139,11 @@ class ClipboardHistoryManager(
         if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
             fetchPrimaryClip()
             dontShowCurrentSuggestion = false
+            // Copied text takes precedence over the screenshot queue chip.
+            if (getPrimaryClipIfText() != null) mainHandler.post {
+                if (!destroyed && !clearingHistory && latinIME.mSettings.current.mClipboardHistoryEnabled)
+                    latinIME.tryShowClipboardSuggestion()
+            }
         }
     }
 
@@ -229,8 +248,9 @@ class ClipboardHistoryManager(
                         Log.w(TAG, "could not clear clipboard database", clearResult.exceptionOrNull())
                     screenshotSuggestionView = null
                     screenshotSuggestionFilename = null
-                    ocrDialog?.dismiss()
-                    ocrDialog = null
+                    screenshotOcrPromptEntry = null
+                    screenshotOcrPromptView = null
+                    screenshotQueuePinnedEntry = null
                     ClipboardManagerCompat.clearPrimaryClip(clipboardManager)
                     removeClipboardSuggestion()
                     latinIME.refreshScreenshotSuggestion()
@@ -295,7 +315,28 @@ class ClipboardHistoryManager(
     /** A recent screenshot is rendered as a compact extra item beside the live word suggestions. */
     fun getRecentScreenshotSuggestionView(editorInfo: EditorInfo?, parent: ViewGroup?): View? {
         if (!latinIME.mSettings.current.mSuggestClipboardContent || parent == null) return null
-        val entry = recentImageEntry()
+        val pendingPrompt = screenshotOcrPromptEntry
+        if (pendingPrompt != null) {
+            val promptFile = pendingPrompt.filename?.let { java.io.File(ClipboardDao.clipFilesDir, it) }
+            if (promptFile?.isFile == true) {
+                screenshotOcrPromptView?.let { return it }
+                return createScreenshotOcrPromptView(pendingPrompt)
+            }
+            screenshotOcrPromptEntry = null
+            screenshotOcrPromptView = null
+        }
+        if (latinIME.prefs().getBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, false)) {
+            screenshotSuggestionView = null
+            screenshotSuggestionFilename = null
+            return null
+        }
+        val pinned = screenshotQueuePinnedEntry
+        val entry = if (pinned?.filename?.let { java.io.File(ClipboardDao.clipFilesDir, it).isFile } == true) {
+            pinned
+        } else {
+            screenshotQueuePinnedEntry = null
+            recentImageEntry()
+        }
         if (entry == null) {
             screenshotSuggestionView = null
             screenshotSuggestionFilename = null
@@ -322,8 +363,8 @@ class ClipboardHistoryManager(
                     entry.timeStamp > legacyDismissedTimestamp &&
                     now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
-            // Newest capture first; database IDs break same-millisecond timestamp ties.
-            ?.maxWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
+            // FIFO: offer the oldest pending capture first; IDs order same-millisecond imports.
+            ?.minWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
     }
 
     private fun recentImageSuggestionView(
@@ -376,10 +417,8 @@ class ClipboardHistoryManager(
         binding.root.setOnLongClickListener(onLongClick)
         imageView.contentDescription = "Нажмите, чтобы вставить изображение; удерживайте, чтобы распознать текст"
         styleSuggestion(binding, textView) {
-            // The close button dismisses the whole current screenshot batch, not just this file.
+            // Hide the whole current queue without deleting saved images from history.
             dismissAllRecentImageSuggestions()
-            screenshotSuggestionView = null
-            screenshotSuggestionFilename = null
             latinIME.refreshScreenshotSuggestion()
         }
         val closeSize = (22 * density).toInt()
@@ -392,61 +431,60 @@ class ClipboardHistoryManager(
     }
 
     /**
-     * OCR inserts the recognized text and opens a compact dialog attached to the IME window.
-     * The screenshot itself remains at the head of the queue until the user chooses Next.
+     * Build the OCR decision inside the existing IME suggestion strip.
+     * A separate dialog window can steal the input-window token and hide the keyboard on some ROMs.
      */
-    private fun showScreenshotOcrDialog(entry: ClipboardHistoryEntry) {
-        if (destroyed) return
-        ocrDialog?.dismiss()
-        val density = latinIME.resources.displayMetrics.density
-        val dialog = AlertDialog.Builder(latinIME)
-            .setTitle("Скриншот распознан")
-            .setMessage("Текст и координаты уже вставлены в поле. Что сделать со скриншотом?")
-            .setPositiveButton("Оставить") { _, _ ->
-                screenshotSuggestionView = null
-                screenshotSuggestionFilename = null
-                latinIME.refreshScreenshotSuggestion()
-            }
-            .setNegativeButton("Следующий") { _, _ ->
-                dismissImageSuggestion(entry)
-                screenshotSuggestionView = null
-                screenshotSuggestionFilename = null
-                latinIME.refreshScreenshotSuggestion()
-            }
-            .setNeutralButton("Закрыть очередь") { _, _ ->
-                dismissAllRecentImageSuggestions()
-                screenshotSuggestionView = null
-                screenshotSuggestionFilename = null
-                latinIME.refreshScreenshotSuggestion()
-            }
-            .create()
-        dialog.setOnCancelListener {
-            screenshotSuggestionView = null
-            screenshotSuggestionFilename = null
-            if (!destroyed) latinIME.refreshScreenshotSuggestion()
+    private fun createScreenshotOcrPromptView(entry: ClipboardHistoryEntry): View {
+        val colors = latinIME.mSettings.current.mColors
+        // The parent screenshot slot is intentionally only 70dp wide. Keep all three
+        // actions inside that slot; a text prompt pushed every button outside its bounds,
+        // leaving an unresponsive-looking "OCR готов" chip on screen.
+        val root = LinearLayout(latinIME).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            contentDescription = "Распознавание завершено. Действия со скриншотом."
         }
-        dialog.setOnDismissListener {
-            if (ocrDialog === dialog) ocrDialog = null
-        }
-        // Attach the dialog to the IME window rather than leaving a dead suggestion-strip prompt.
-        runCatching {
-            val imeWindow = latinIME.window.window ?: return@runCatching
-            val token = imeWindow.attributes.token ?: imeWindow.decorView.windowToken
-                ?: return@runCatching
-            dialog.window?.let { dialogWindow ->
-                val params = dialogWindow.attributes
-                params.type = WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG
-                params.token = token
-                dialogWindow.attributes = params
+        fun addAction(symbol: String, description: String, action: () -> Unit) {
+            val button = TextView(latinIME).apply {
+                text = symbol
+                contentDescription = description
+                setTextColor(colors.get(ColorType.KEY_TEXT))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                isSingleLine = true
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    AudioAndHapticFeedbackManager.getInstance()
+                        .performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
+                    action()
+                }
             }
+            root.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
-        ocrDialog = dialog
-        runCatching { dialog.show() }.onFailure {
-            ocrDialog = null
-            Log.w(TAG, "could not show screenshot OCR dialog", it)
-            Toast.makeText(latinIME, "Текст вставлен. Не удалось открыть окно действий.", Toast.LENGTH_LONG).show()
+        // Only two actions: keep this image, or skip only this image.
+        addAction("✓", "Оставить этот скриншот в очереди") {
+            screenshotQueuePinnedEntry = entry
+            clearScreenshotOcrPrompt()
+            latinIME.refreshScreenshotSuggestion()
         }
-        dialog.window?.setLayout((300 * density).toInt(), WindowManager.LayoutParams.WRAP_CONTENT)
+        addAction("×", "Пропустить этот скриншот и показать следующий") {
+            clearScreenshotOcrPrompt()
+            dismissImageSuggestion(entry)
+            latinIME.refreshScreenshotSuggestion()
+        }
+        colors.setBackground(root, ColorType.CLIPBOARD_SUGGESTION_BACKGROUND)
+        screenshotOcrPromptView = root
+        return root
+    }
+
+    private fun clearScreenshotOcrPrompt() {
+        screenshotOcrPromptEntry = null
+        screenshotOcrPromptView = null
+        screenshotSuggestionView = null
+        screenshotSuggestionFilename = null
     }
 
     private fun recognizeScreenshot(entry: ClipboardHistoryEntry) {
@@ -470,11 +508,22 @@ class ClipboardHistoryManager(
                 val reason = error ?: "нет текста"
                 Toast.makeText(latinIME, "Не удалось распознать изображение: " + reason, Toast.LENGTH_LONG).show()
             } else {
-                latinIME.onTextInput(text)
+                // Set the prompt state before committing text: onTextInput may refresh the strip.
+                screenshotOcrPromptEntry = entry
+                screenshotOcrPromptView = null
                 screenshotSuggestionView = null
                 screenshotSuggestionFilename = null
-                latinIME.refreshScreenshotSuggestion()
-                showScreenshotOcrDialog(entry)
+                val inserted = runCatching { latinIME.onTextInput(text) }
+                if (inserted.isFailure) {
+                    clearScreenshotOcrPrompt()
+                    Toast.makeText(latinIME, "Текст распознан, но не удалось вставить его в поле.", Toast.LENGTH_LONG).show()
+                    Log.w(TAG, "could not insert screenshot OCR text", inserted.exceptionOrNull())
+                    latinIME.refreshScreenshotSuggestion()
+                } else {
+                    runCatching { latinIME.refreshScreenshotSuggestion() }.onFailure {
+                        Log.w(TAG, "could not refresh screenshot OCR prompt", it)
+                    }
+                }
             }
         }
     }
@@ -498,6 +547,8 @@ class ClipboardHistoryManager(
 
     private fun dismissImageSuggestion(entry: ClipboardHistoryEntry) {
         // Pasting one image dismisses only that image; the next queued image can still be offered.
+        if (screenshotQueuePinnedEntry?.id == entry.id) screenshotQueuePinnedEntry = null
+        if (screenshotOcrPromptEntry?.id == entry.id) clearScreenshotOcrPrompt()
         val filename = entry.filename ?: return
         val prefs = latinIME.prefs()
         val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet()).orEmpty().toMutableSet()
@@ -515,26 +566,34 @@ class ClipboardHistoryManager(
      * has a newer timestamp and becomes eligible normally.
      */
     private fun dismissAllRecentImageSuggestions() {
-        val now = System.currentTimeMillis()
-        val prefs = latinIME.prefs()
-        val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet())
-            .orEmpty().toMutableSet()
-        val recentFiles = clipboardDao?.getAll().orEmpty()
-            .asSequence()
-            .filter { entry ->
-                entry.filename != null &&
-                    entry.mimeTypes?.any { it.startsWith("image/") } == true &&
-                    now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
-            }
-            .mapNotNull { it.filename }
-            .toSet()
-        dismissed.addAll(recentFiles)
-        screenshotSuggestionFilename?.let { dismissed.add(it) }
+        screenshotQueuePinnedEntry = null
+        clearScreenshotOcrPrompt()
+        screenshotSuggestionView = null
+        screenshotSuggestionFilename = null
+        // Hide presentation only; new capture reactivates the still-pending queue.
+        latinIME.prefs().edit().putBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, true).apply()
+    }
 
-        prefs.edit()
-            .putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed)
-            .putLong(PREF_DISMISSED_IMAGE_TIMESTAMP, now)
-            .apply()
+    /** Restore legacy batch-closed entries when a fresh screenshot arrives. */
+    private fun reactivateScreenshotQueueForNewCapture() {
+        val prefs = latinIME.prefs()
+        val legacyCutoff = prefs.getLong(PREF_DISMISSED_IMAGE_TIMESTAMP, 0L)
+        val editor = prefs.edit()
+        if (legacyCutoff > 0L) {
+            val legacyBatchFiles = clipboardDao?.getAll().orEmpty()
+                .asSequence()
+                .filter { entry -> entry.filename != null &&
+                    entry.mimeTypes?.any { it.startsWith("image/") } == true &&
+                    entry.timeStamp in (legacyCutoff - RECENT_IMAGE_MILLIS - 60_000L)..(legacyCutoff + 60_000L) }
+                .mapNotNull { it.filename }
+                .toSet()
+            val dismissed = prefs.getStringSet(PREF_DISMISSED_IMAGE_FILENAMES, emptySet())
+                .orEmpty().toMutableSet()
+            dismissed.removeAll(legacyBatchFiles)
+            editor.putStringSet(PREF_DISMISSED_IMAGE_FILENAMES, dismissed)
+                .remove(PREF_DISMISSED_IMAGE_TIMESTAMP)
+        }
+        editor.putBoolean(PREF_SCREENSHOT_QUEUE_DISMISSED, false).apply()
     }
 
     private fun styleSuggestion(binding: ClipboardSuggestionBinding, textView: android.widget.TextView, onClose: () -> Unit) {
@@ -581,7 +640,10 @@ class ClipboardHistoryManager(
             else latinIME.onEvent(Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_PASTE, 0,
                 Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false))
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
-            binding.root.isGone = true
+            // Remove the external text card through the normal suggestion-strip path.
+            // Hiding only its view leaves isExternalSuggestionVisible=true and keeps the
+            // screenshot queue hidden even though the text has already been pasted.
+            removeClipboardSuggestion()
         }
         textView.setOnClickListener(onClickListener)
 
@@ -623,6 +685,9 @@ class ClipboardHistoryManager(
             latinIME.mHandler.postResumeSuggestions(false)
         }
         csv.isGone = true
+        // The text card has released the external suggestion strip; restore the screenshot
+        // queue in its own slot while keeping the three live word suggestions untouched.
+        mainHandler.post { if (!destroyed) latinIME.refreshScreenshotSuggestion() }
     }
 
     companion object {
@@ -633,6 +698,7 @@ class ClipboardHistoryManager(
         /** image suggestion that was pasted or dismissed */
         private const val PREF_DISMISSED_IMAGE_TIMESTAMP = "kl_clip_dismissed_image_timestamp" // legacy cutoff from 1.4.2
         private const val PREF_DISMISSED_IMAGE_FILENAMES = "kl_clip_dismissed_image_filenames"
+        private const val PREF_SCREENSHOT_QUEUE_DISMISSED = "kl_clip_screenshot_queue_dismissed"
         const val RECENT_IMAGE_MILLIS = 10 * 60 * 1000L
 
         const val RECENT_TIME_MILLIS = 3 * 60 * 1000L // 3 minutes (for clipboard suggestions)

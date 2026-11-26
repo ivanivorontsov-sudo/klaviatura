@@ -41,7 +41,12 @@ object GlideEngine : GlideLearning {
         ru.klaviatura.text.Profanity.init(context)
         ru.klaviatura.text.Yo.init(context)
         thread(name = "kl-glide-load") {
-            for (lang in listOf("ru", "en", ru.klaviatura.code.CodeMode.LEX_LANG)) { try { loadLexicon(lang); if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang) } catch (e: Throwable) { } }
+            for (lang in listOf("ru_priority", "ru", "en_brands", "en", ru.klaviatura.code.CodeMode.LEX_LANG)) {
+                try {
+                    loadLexicon(lang)
+                    if (lang == "ru" || lang == "en") loadLm(lang)
+                } catch (e: Throwable) { }
+            }
             try { ProperNouns.forms = appContext!!.assets.open("glide/ru_proper.txt").bufferedReader().useLines { it.toHashSet() } } catch (e: Exception) { }
             load()
         }
@@ -114,17 +119,58 @@ object GlideEngine : GlideLearning {
             .sortedByDescending { it.value }
             .map { it.key.substringAfterLast('\t') }
         val user = bigrams.entries.filter { it.key.startsWith("$p\t") }.sortedByDescending { it.value }.map { it.key.substringAfter('\t') }
-        val base = lms.values.flatMap { it.next(p, n) }
-        return (curated + tri + user + base).filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }.distinct().take(n)
+        val lmLanguage = if (p.any { it in '\u0400'..'\u04FF' }) "ru" else "en"
+        val base = lms[lmLanguage]?.next(p, n).orEmpty()
+        return filterByContextScript(p, curated + tri + user + base)
+            .filter { !isForgotten(it) && !isUkraineRelatedPrediction(it) && !isUnwantedHelpUkrainePair(p, it) }
+            .distinct().take(n)
+    }
+
+    /** Prevent user bigrams/trigrams collected across languages from leaking English into Russian predictions. */
+    internal fun filterByContextScript(previous: String, candidates: List<String>): List<String> {
+        val isCyrillicContext = previous.any { it in '\u0400'..'\u04FF' }
+        return candidates.filter { candidate ->
+            candidate.none { ch ->
+                if (!ch.isLetter()) false
+                else if (isCyrillicContext) ch !in '\u0400'..'\u04FF'
+                else ch !in 'A'..'Z' && ch !in 'a'..'z'
+            }
+        }
     }
     private fun loadLexicon(lang: String): Lexicon? {
         lexicons[lang]?.let { return it }
         val ctx = appContext ?: return null
         return try {
-            val lex = ctx.assets.open("glide/$lang.tsv").bufferedReader().useLines { Lexicon.parse(lang, it) }
-            // Domain vocabulary absent from frequency corpora: make these forms available to swipe typing.
-            if (lang == "ru") RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
-            ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
+            val assetPath = when (lang) {
+                "ru_priority" -> "glide/ru_priority.tsv"
+                "en_brands" -> "glide/en_extra.tsv"
+                else -> "glide/$lang.tsv"
+            }
+            val lex = ctx.assets.open(assetPath).bufferedReader().useLines { Lexicon.parse(lang, it) }
+            // Domain vocabulary absent from frequency corpora: load it on every fresh install.
+            if (lang == "ru") {
+                RU_SPECIAL_WORDS.forEach { lex.addOrBoost(it, 8_000L) }
+                ctx.assets.open("glide/ru_slang.tsv").bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val tab = line.indexOf('\t')
+                        if (tab > 0) {
+                            val word = line.substring(0, tab)
+                            val frequency = line.substring(tab + 1).toLongOrNull() ?: 1L
+                            lex.addOrBoost(word, frequency)
+                        }
+                    }
+                }
+            }
+            if (lang == "en") {
+                ctx.assets.open("glide/en_extra.tsv").bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val tab = line.indexOf('\t')
+                        if (tab > 0) lex.addOrBoost(line.substring(0, tab), line.substring(tab + 1).toLongOrNull() ?: 1L)
+                    }
+                }
+            }
+            if (lang != "ru_priority" && lang != "en_brands")
+                ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lex)
             lexicons[lang] = lex
             lex
         } catch (e: Throwable) { null }
@@ -168,6 +214,37 @@ object GlideEngine : GlideLearning {
         return when (word.lowercase(Locale.ROOT).replace('ё', 'е')) {
             "россии" -> "России"
             "ии" -> "ИИ"
+            "samsung" -> "Samsung"
+            "xiaomi" -> "Xiaomi"
+            "huawei" -> "Huawei"
+            "honor" -> "HONOR"
+            "oneplus" -> "OnePlus"
+            "oppo" -> "OPPO"
+            "vivo" -> "vivo"
+            "motorola" -> "Motorola"
+            "google" -> "Google"
+            "realme" -> "realme"
+            "iphone" -> "iPhone"
+            "ipad" -> "iPad"
+            "ios" -> "iOS"
+            "android" -> "Android"
+            "tiktok" -> "TikTok"
+            "telegram" -> "Telegram"
+            "whatsapp" -> "WhatsApp"
+            "youtube" -> "YouTube"
+            "instagram" -> "Instagram"
+            "github" -> "GitHub"
+            "grok" -> "Grok"
+            "chatgpt" -> "ChatGPT"
+            "openai" -> "OpenAI"
+            "windows" -> "Windows"
+            "linux" -> "Linux"
+            "debian" -> "Debian"
+            "chrome" -> "Chrome"
+            "firefox" -> "Firefox"
+            "vivaldi" -> "Vivaldi"
+            "bluetooth" -> "Bluetooth"
+            "wifi" -> "Wi-Fi"
             else -> word
         }
     }
@@ -198,10 +275,28 @@ object GlideEngine : GlideLearning {
             else GKey(Character.toLowerCase(c.toChar()), k.x + k.width / 2f, k.y + k.height / 2f, k.width.toFloat(), k.height.toFloat())
         }
         if (keys.isEmpty()) return emptyList()
-        val main = keyboard.mId.locale.language
+        val declaredMain = keyboard.mId.locale.language
+        // Use the visible key script as a guard against the first-IME-start subtype race.
+        val cyrillicKeys = keyboard.sortedKeys.count { it.code > 0 &&
+            Character.UnicodeScript.of(it.code) == Character.UnicodeScript.CYRILLIC }
+        val latinKeys = keyboard.sortedKeys.count { it.code > 0 &&
+            Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN }
+        val main = if (cyrillicKeys > latinKeys && declaredMain !in CYR) "ru" else declaredMain
         lastMainLang = main
-        val langs = (listOf(main) + locales.map { it.language }).distinct()
-        val lex = langs.mapIndexedNotNull { i, l -> lexiconIfReady(l)?.let { it to (if (i == 0) 0.0 else 0.3) } }.toMutableList()
+        // The full English lexicon is never cross-scanned on ЙЦУКЕН. Only an explicit
+        // short brand list is offered as a cross-layout exception.
+        val langs = if (main == "ru") listOf("ru") else
+            (listOf(main) + locales.map { it.language }).distinct()
+        val mainLexicon = lexiconIfReady(main) ?: return emptyList()
+        val lex = mutableListOf(mainLexicon to 0.0)
+        if (main == "ru") {
+            lexiconIfReady("ru_priority")?.let { lex.add(0, it to 0.0) }
+            lexiconIfReady("en_brands")?.let { lex.add(it to 0.65) }
+        } else {
+            langs.drop(1).forEach { lang ->
+                lexiconIfReady(lang)?.let { lex.add(it to 0.3) }
+            }
+        }
         val codeMode = ru.klaviatura.code.CodeMode.isCodeLayout(keyboard)
         ru.klaviatura.code.CodeMode.active = codeMode
         if (codeMode) {
@@ -269,17 +364,22 @@ object GlideEngine : GlideLearning {
         }
     }
 
-    /** Reload dictionaries after a downloaded pack is installed or removed. */
+    /**
+     * Apply newly installed/updated lexicon packs without throwing away the live dictionaries.
+     *
+     * Called by the settings screen on Dispatchers.IO. A live lexicon is guarded by the same
+     * monitor used by GlideDecoder while it scans, and this method returns only after the
+     * active Russian/English packs are available for swipe input.
+     */
     fun reloadLexicons() {
-        lexicons.clear()
-        loading.clear()
-        lms.clear()
-        val languages = listOf("ru", "en", "pl", "uk", "de", "fr", "es", "it", "pt", "nl", "sv", "tr", "bg", "ro", "hu", "el", ru.klaviatura.code.CodeMode.LEX_LANG)
-        thread(name = "kl-glide-reload") {
-            languages.forEach { lang ->
-                runCatching {
-                    loadLexicon(lang)
-                    if (lang != ru.klaviatura.code.CodeMode.LEX_LANG) loadLm(lang)
+        val languages = (lexicons.keys.toList() + listOf(lastMainLang, "ru", "en")).distinct()
+        languages.forEach { lang ->
+            runCatching {
+                val lexicon = lexicons[lang] ?: loadLexicon(lang)
+                if (lexicon != null && lexicons[lang] === lexicon) {
+                    synchronized(lexicon) {
+                        ru.klaviatura.code.SyntaxPackManager.applyLexicons(lang, lexicon)
+                    }
                 }
             }
         }
@@ -308,7 +408,7 @@ object GlideEngine : GlideLearning {
             val tri = if (p2 == null) 0.0 else
                 trigrams["$p2\t$p\t$w"]?.let { 0.45 * ln(1.0 + it) } ?: 0.0
             (bigrams["$p\t$w"]?.let { 0.35 * ln(1.0 + it) } ?: 0.0) +
-                tri + GlideDecoder.CTX_W * (lms.values.maxOfOrNull { it.score(p, w) } ?: 0.0)
+                tri + GlideDecoder.CTX_W * (lms[if (p.any { it in '\u0400'..'\u04FF' }) "ru" else "en"]?.score(p, w) ?: 0.0)
         }
     override fun isForgotten(word: String) = forgotten.contains(word) || ru.klaviatura.text.Profanity.blocks(word)
 

@@ -74,7 +74,9 @@ import helium314.keyboard.latin.utils.TextRange;
 import helium314.keyboard.latin.utils.TimestampKt;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 
@@ -2572,17 +2574,38 @@ public final class InputLogic {
         mWordComposer.adviseCapitalizedModeBeforeFetchingSuggestions(
                 getActualCapsMode(settingsValues, KeyboardSwitcher.getInstance().getKeyboardCapsMode()));
         try {
-            SuggestedWords suggestedWords = mSuggest.getSuggestedWords(mWordComposer.copy(),
-                    getNgramContextFromNthPreviousWordForSuggestion(
+            final NgramContext ngramContext = getNgramContextFromNthPreviousWordForSuggestion(
                     settingsValues.mSpacingAndPunctuations,
-                    // Get the word on which we should search the bigrams. If we are composing
-                    // a word, it's whatever is *before* the half-committed word in the buffer,
-                    // hence 2; if we aren't, we should just skip whitespace if any, so 1.
-                    mWordComposer.isComposingWord() ? 2 : 1),
-                    keyboard,
-                    settingsValues.mSettingsValuesForSuggestion,
-                    settingsValues.mAutoCorrectEnabled,
-                    inputStyle, sequenceNumber);
+                    // If composing, use the word before the half-committed word; otherwise skip whitespace.
+                    mWordComposer.isComposingWord() ? 2 : 1);
+            SuggestedWords suggestedWords = mSuggest.getSuggestedWords(mWordComposer.copy(),
+                    ngramContext, keyboard, settingsValues.mSettingsValuesForSuggestion,
+                    settingsValues.mAutoCorrectEnabled, inputStyle, sequenceNumber);
+
+            // Add local Russian/English context predictions to the regular prediction strip.
+            // The outer suggestions gate still prevents predictions in protected/sensitive fields.
+            if (!mWordComposer.isComposingWord() && suggestedWords.isPrediction()
+                    && settingsValues.mBigramPredictionEnabled && !settingsValues.mIncognitoModeEnabled) {
+                final List<SuggestedWordInfo> contextual =
+                        ru.klaviatura.glide.GlideEngine.INSTANCE.predictions(ngramContext);
+                if (!contextual.isEmpty()) {
+                    final ArrayList<SuggestedWordInfo> merged = new ArrayList<>();
+                    final HashSet<String> seen = new HashSet<>();
+                    for (final SuggestedWordInfo info : contextual) {
+                        if (seen.add(info.mWord) && merged.size() < SuggestedWords.MAX_SUGGESTIONS)
+                            merged.add(info);
+                    }
+                    for (int i = 0; i < suggestedWords.size()
+                            && merged.size() < SuggestedWords.MAX_SUGGESTIONS; i++) {
+                        final SuggestedWordInfo info = suggestedWords.getInfo(i);
+                        if (seen.add(info.mWord)) merged.add(info);
+                    }
+                    suggestedWords = new SuggestedWords(merged, suggestedWords.mRawSuggestions,
+                            suggestedWords.mTypedWordInfo, suggestedWords.mTypedWordValid,
+                            suggestedWords.mWillAutoCorrect, suggestedWords.mIsObsoleteSuggestions,
+                            inputStyle, sequenceNumber);
+                }
+            }
             callback.onGetSuggestedWords(suggestedWords);
         } catch (Exception e) {
             // better go without suggestions than have the keyboard crash
