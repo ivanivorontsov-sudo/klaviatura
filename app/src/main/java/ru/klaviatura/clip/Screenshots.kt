@@ -73,6 +73,14 @@ object Screenshots {
     internal fun keepQueueDismissed(wasDismissed: Boolean, importedCount: Int): Boolean =
         wasDismissed && importedCount <= 0
 
+    /** Positive when the first capture is newer; stable IDs order same-millisecond imports. */
+    internal fun compareCaptureOrder(
+        firstTimestamp: Long, firstId: Long, secondTimestamp: Long, secondId: Long
+    ): Int {
+        val timestampOrder = firstTimestamp.compareTo(secondTimestamp)
+        return if (timestampOrder != 0) timestampOrder else firstId.compareTo(secondId)
+    }
+
     /**
      * Import every unseen screenshot in the recent window. The callback runs on the caller's
      * worker thread, keeping image copying and hashing off the keyboard UI thread.
