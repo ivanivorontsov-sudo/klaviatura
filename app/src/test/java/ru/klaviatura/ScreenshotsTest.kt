@@ -56,4 +56,10 @@ class ScreenshotsTest {
         assertFalse(ClipKind.isImage(null, listOf("text/plain")))
     }
 
+    @Test fun newestScreenshotWinsAndHigherIdBreaksTimestampTies() {
+        assertTrue(Screenshots.compareCaptureOrder(200L, 2L, 100L, 99L) > 0)
+        assertTrue(Screenshots.compareCaptureOrder(200L, 3L, 200L, 2L) > 0)
+        assertTrue(Screenshots.compareCaptureOrder(100L, 1L, 200L, 2L) < 0)
+    }
+
 }
