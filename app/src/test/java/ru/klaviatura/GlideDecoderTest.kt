@@ -140,6 +140,28 @@ class GlideDecoderTest {
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)
     }
 
+    @Test fun onePointCannotSatisfyTwoVeryCloseLetters() {
+        val closeKeys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 110f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 10_000L) }
+        val xs = IntArray(32) { 105 }
+        val ys = IntArray(32) { 100 }
+        val result = GlideDecoder(closeKeys).decode(xs, ys, xs.size, listOf(lex to 0.0))
+        assertTrue("a stationary trace must not decode as two adjacent letters", result.none { it.word == "ab" })
+    }
+
+    @Test fun longWordsHaveASeparateFrequencyIndependentIndex() {
+        val lex = Lexicon("ru").apply {
+            add("мама", 1_000_000L)
+            add("перспективно", 1L)
+        }
+        val longList = lex.byLongFirst['п']
+        assertTrue("long-word index must include rare forms", longList != null &&
+            (0 until longList.n).any { lex.word(longList.a[it]) == "перспективно" })
+    }
+
     @Test fun trimmingAllNonLetterGivesNothing() {
         val (x, y) = path(listOf(GLOBE, SPACE))
         assertEquals(0, GlideDecoder(jcuken).decode(x, y, x.size, listOf(ru to 0.0)).size)
