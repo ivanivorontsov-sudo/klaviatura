@@ -17,13 +17,16 @@ import helium314.keyboard.latin.utils.mainLayoutName
 import helium314.keyboard.latin.utils.prefs
 
 /**
- * 1.5.9: the programming layout was invisible because it only existed as an optional layout that had to be added by
- * hand in the language settings. Now it is (a) enabled for existing users on update, so it shows up in the globe /
- * space-long-press language switch, and (b) reachable with the «</>» toolbar key, which toggles it.
+ * Optional Russian and Latin programming layouts. They are added only after an explicit opt-in
+ * in Settings; the toolbar action merely switches to an already enabled layout.
  */
 object CodeLayoutSwitch {
-    const val PREF_DONE = "klaviatura_code_layout_v1"
+    private const val PREF_MIGRATION_V2 = "klaviatura_code_layout_v2"
+    const val PREF_CODE_LAYOUTS_ENABLED = "klaviatura_code_layouts_enabled"
     private var previous: InputMethodSubtype? = null
+
+    fun isEnabled(context: Context): Boolean =
+        context.prefs().getBoolean(PREF_CODE_LAYOUTS_ENABLED, false)
 
     /** pure decision: main layout to go to, null = leave the code layout */
     fun targetLayout(currentLayout: String?, cyrillic: Boolean): String? = when {
