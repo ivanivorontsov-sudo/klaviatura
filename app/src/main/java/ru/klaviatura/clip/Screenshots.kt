@@ -69,14 +69,18 @@ object Screenshots {
         }
     }
 
+    /** A successfully imported new image reopens a queue hidden by the previous close action. */
+    internal fun keepQueueDismissed(wasDismissed: Boolean, importedCount: Int): Boolean =
+        wasDismissed && importedCount <= 0
+
     /**
      * Import every unseen screenshot in the recent window. The callback runs on the caller's
      * worker thread, keeping image copying and hashing off the keyboard UI thread.
      * An ID is remembered only after the caller confirms that the image was saved.
      */
-    fun importRecent(ctx: Context, add: (Uri, Long, ClipDescription) -> Boolean) {
+    fun importRecent(ctx: Context, add: (Uri, Long, ClipDescription) -> Boolean): Int {
         val prefs = ctx.prefs()
-        if (!enabled(ctx) || !granted(ctx)) return
+        if (!enabled(ctx) || !granted(ctx)) return 0
         try {
             val now = System.currentTimeMillis() / 1000
             val col = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -109,18 +113,24 @@ object Screenshots {
             }
 
             var changed = false
+            var importedCount = 0
             pending.asReversed().forEach { item ->
                 val saved = runCatching { add(item.uri, item.timestamp, item.description) }.getOrDefault(false)
                 if (saved) {
                     importedIds.add(item.id.toString())
                     changed = true
+                    importedCount++
                 }
             }
             if (changed) {
                 val boundedIds = if (importedIds.size > 300) importedIds.toList().takeLast(300).toSet() else importedIds.toSet()
                 prefs.edit().putStringSet(IMPORTED_IDS, boundedIds).apply()
             }
-        } catch (e: Throwable) { android.util.Log.w("KlScreenshots", "import failed", e) }
+            return importedCount
+        } catch (e: Throwable) {
+            android.util.Log.w("KlScreenshots", "import failed", e)
+            return 0
+        }
     }
 
     /** New screenshots arrive while the keyboard is alive; some ROMs publish rows in stages. */
