@@ -418,8 +418,12 @@ class ClipboardHistoryManager(
                     entry.timeStamp > legacyDismissedTimestamp &&
                     now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
-            // FIFO: offer the oldest pending capture first; IDs order same-millisecond imports.
-            ?.minWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
+            // LIFO: offer the newest pending capture first; IDs order same-millisecond imports.
+            ?.maxWithOrNull { first, second ->
+                ru.klaviatura.clip.Screenshots.compareCaptureOrder(
+                    first.timeStamp, first.id, second.timeStamp, second.id
+                )
+            }
     }
 
     private fun recentImageSuggestionView(
