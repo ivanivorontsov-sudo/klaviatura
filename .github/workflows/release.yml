@@ -43,12 +43,16 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Select release tag
+        if: startsWith(github.ref, 'refs/heads/v')
+        shell: bash
+        run: echo "RELEASE_TAG=${GITHUB_REF_NAME%-refresh}" >> "$GITHUB_ENV"
       - name: Point release tag at the exact merged commit
         if: startsWith(github.ref, 'refs/heads/v')
         shell: bash
         run: |
-          git tag --force "$GITHUB_REF_NAME" "$GITHUB_SHA"
-          git push --force origin "refs/tags/$GITHUB_REF_NAME"
+          git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_TAG"
       - name: Recreate release with a fresh publication date and only the current APK
         if: startsWith(github.ref, 'refs/heads/v')
         shell: bash
@@ -79,15 +83,19 @@ jobs:
           ### Сборка
           Версия 1.5.19 (versionCode 41). APK подписан release-ключом; unit-тесты и проверка JNI после R8 пройдены.
           EOF
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release delete "$GITHUB_REF_NAME" --yes
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --yes
           fi
-          gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/*.apk \
+          gh release create "$RELEASE_TAG" app/build/outputs/apk/release/*.apk \
             --verify-tag \
-            --title "Клавиатура $GITHUB_REF_NAME" \
+            --title "Клавиатура $RELEASE_TAG" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             --target "$GITHUB_SHA" \
             --latest
       - name: Delete temporary release branch
         if: startsWith(github.ref, 'refs/heads/v')
-        run: git push origin --delete "$GITHUB_REF_NAME" || true
+        run: |
+          git push origin --delete "$GITHUB_REF_NAME" || true
+          if [ "$GITHUB_REF_NAME" != "v1.5.19" ]; then
+            git push origin --delete "v1.5.19" || true
+          fi
