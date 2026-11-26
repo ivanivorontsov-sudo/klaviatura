@@ -163,7 +163,10 @@
     <string name="select_color_accent">Акцент</string>
     <string name="settings_screen_about">О приложении</string>
     <string name="version">Версия</string>
-    <string name="about_github_link">Посмотреть на GitHub</string>
+    <string name="about_base_source">Исходный проект: HeliBoard</string>
+    <string name="about_base_source_description">Открыть репозиторий исходной клавиатуры, на основе которой создана эта версия</string>
+    <string name="about_custom_version_source">Автор кастомной версии: Иван Воронцов</string>
+    <string name="about_custom_version_source_description">Исходный код и разработка модифицированной версии «Клавиатура»</string>
     <string name="license">Лицензия с открытым исходным кодом</string>
     <string name="gnu_gpl">Стандартная общественная лицензия GNU v3.0</string>
     <string name="dialog_close">Закрыть</string>

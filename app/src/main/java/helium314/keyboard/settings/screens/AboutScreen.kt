@@ -59,6 +59,7 @@ fun AboutScreen(
         SettingsWithoutKey.GITHUB_WIKI,
         SettingsWithoutKey.COMMUNITY_LINKS,
         SettingsWithoutKey.GITHUB,
+        SettingsWithoutKey.CUSTOM_VERSION_SOURCE,
         SettingsWithoutKey.SAVE_LOG,
     )
     SearchSettingsScreen(
@@ -161,7 +162,7 @@ fun createAboutSettings(context: Context) = listOf(
             icon = R.drawable.ic_settings_about_community
         )
      },
-    Setting(context, SettingsWithoutKey.GITHUB, R.string.about_github_link) {
+    Setting(context, SettingsWithoutKey.GITHUB, R.string.about_base_source, R.string.about_base_source_description) {
         val ctx = LocalContext.current
         Preference(
             name = it.title,
@@ -169,6 +170,20 @@ fun createAboutSettings(context: Context) = listOf(
             onClick = {
                 val intent = Intent()
                 intent.data = Links.GITHUB.toUri()
+                intent.action = Intent.ACTION_VIEW
+                ctx.startActivity(intent)
+            },
+            icon = R.drawable.ic_settings_about_github
+        )
+    },
+    Setting(context, SettingsWithoutKey.CUSTOM_VERSION_SOURCE, R.string.about_custom_version_source, R.string.about_custom_version_source_description) {
+        val ctx = LocalContext.current
+        Preference(
+            name = it.title,
+            description = it.description,
+            onClick = {
+                val intent = Intent()
+                intent.data = Links.CUSTOM_VERSION_GITHUB.toUri()
                 intent.action = Intent.ACTION_VIEW
                 ctx.startActivity(intent)
             },
