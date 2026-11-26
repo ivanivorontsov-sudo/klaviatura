@@ -3,6 +3,7 @@ on:
   push:
     branches: ['v*']
     tags: ['v*']
+  create:
   pull_request:
     branches: [main]
     paths:
@@ -96,6 +97,5 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/v')
         run: |
           git push origin --delete "$GITHUB_REF_NAME" || true
-          if [ "$GITHUB_REF_NAME" != "v1.5.19" ]; then
-            git push origin --delete "v1.5.19" || true
-          fi
+          git push origin --delete "v1.5.19" || true
+          git push origin --delete "v1.5.19-refresh" || true
