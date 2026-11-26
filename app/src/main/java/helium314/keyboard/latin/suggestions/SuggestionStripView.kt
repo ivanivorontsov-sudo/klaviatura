@@ -129,6 +129,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val suggestionsStrip: ViewGroup = findViewById(R.id.suggestions_strip)
     // Screenshot chips have their own slot and never share the word-suggestion container.
     private val screenshotSuggestionContainer: FrameLayout = findViewById(R.id.screenshot_suggestion_container)
+    private val defaultSuggestionSlotWidth = screenshotSuggestionContainer.layoutParams.width
+    private val clipboardSuggestionSlotWidth = (112 * resources.displayMetrics.density).toInt()
     private val voiceStatusContainer: FrameLayout = findViewById(R.id.voice_status_container)
     private val voiceStatusLabel = TextView(context).apply {
         gravity = Gravity.CENTER
@@ -247,6 +249,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private var startIndexOfMoreSuggestions = 0
     private var isExternalSuggestionVisible = false // Required to disable the more suggestions if other suggestions are visible
     private var inlineSuggestionView: View? = null
+    /** Clipboard text has priority over the screenshot chip but never replaces word suggestions. */
+    private var clipboardSuggestionView: View? = null
     private val layoutHelper = SuggestionStripLayoutHelper(context, attrs, defStyle, wordViews, dividerViews, debugInfoViews)
     private val moreSuggestionsView = moreSuggestionsContainer.findViewById<MoreSuggestionsView>(R.id.more_suggestions_view).apply {
         val slidingListener = object : SimpleOnGestureListener() {
@@ -338,21 +342,32 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             inlineSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
             inlineSuggestionView = view
         }
-        if (view == null) {
-            screenshotSuggestionContainer.removeAllViews()
-        } else if (view.parent !== screenshotSuggestionContainer) {
-            (view.parent as? ViewGroup)?.removeView(view)
-            screenshotSuggestionContainer.removeAllViews()
-            screenshotSuggestionContainer.addView(
-                view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-            )
+        // Keep the clipboard chip in front; refresh its screenshot sibling in the background.
+        if (clipboardSuggestionView == null) attachInlineSuggestionView()
+        else syncSuggestionAreaVisibility()
+    }
+
+    /** Shows the current clipboard chip in the same independent slot as screenshots. */
+    fun setClipboardSuggestionView(view: View?) {
+        if (clipboardSuggestionView !== view) {
+            clipboardSuggestionView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
+            clipboardSuggestionView = view
         }
-        syncSuggestionAreaVisibility()
+        attachInlineSuggestionView()
     }
 
     private fun attachInlineSuggestionView() {
-        val view = inlineSuggestionView
-        if (view != null && view.parent !== screenshotSuggestionContainer) {
+        val view = clipboardSuggestionView ?: inlineSuggestionView
+        val targetWidth = if (clipboardSuggestionView != null)
+            clipboardSuggestionSlotWidth else defaultSuggestionSlotWidth
+        val params = screenshotSuggestionContainer.layoutParams
+        if (params.width != targetWidth) {
+            params.width = targetWidth
+            screenshotSuggestionContainer.layoutParams = params
+        }
+        if (view == null) {
+            screenshotSuggestionContainer.removeAllViews()
+        } else if (view.parent !== screenshotSuggestionContainer) {
             (view.parent as? ViewGroup)?.removeView(view)
             screenshotSuggestionContainer.removeAllViews()
             screenshotSuggestionContainer.addView(
