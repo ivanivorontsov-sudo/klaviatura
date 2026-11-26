@@ -30,15 +30,15 @@ class CodeLayoutTest {
     @Test fun codeKeyIsUnpinnedWithoutDroppingOtherKeys() {
         val sep = Separators.ENTRY
         val kv = Separators.KV
-        val old = listOf("CLIPBOARD${kv}true", "EMOJI${kv}true", "VOICE${kv}true", "CODE${kv}true", "UNDO${kv}false").joinToString(sep)
+        val old = listOf("CLIPBOARD" + kv + "true", "EMOJI" + kv + "true", "VOICE" + kv + "true", "CODE" + kv + "true", "UNDO" + kv + "false").joinToString(sep)
         val new = CodeLayoutSwitch.unpinCodeKey(old).split(sep)
-        assertEquals(listOf("CLIPBOARD${kv}true", "EMOJI${kv}true", "VOICE${kv}true", "CODE${kv}false", "UNDO${kv}false"), new)
+        assertEquals(listOf("CLIPBOARD" + kv + "true", "EMOJI" + kv + "true", "VOICE" + kv + "true", "CODE" + kv + "false", "UNDO" + kv + "false"), new)
         assertEquals(new, CodeLayoutSwitch.unpinCodeKey(new.joinToString(sep)).split(sep))
     }
 
     @Test fun codeKeyIsInExpandableToolbarButNotPinnedByDefault() {
         assertTrue(ToolbarKey.entries.any { it.name == "CODE" })
-        assertTrue(defaultToolbarPref.split(Separators.ENTRY).contains("CODE${Separators.KV}true"))
-        assertTrue(defaultPinnedToolbarPref.split(Separators.ENTRY).contains("CODE${Separators.KV}false"))
+        assertTrue(defaultToolbarPref.split(Separators.ENTRY).contains("CODE" + Separators.KV + "true"))
+        assertTrue(defaultPinnedToolbarPref.split(Separators.ENTRY).contains("CODE" + Separators.KV + "false"))
     }
 }
