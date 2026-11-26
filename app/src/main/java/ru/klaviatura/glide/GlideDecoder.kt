@@ -25,6 +25,10 @@ class Lexicon(val lang: String) {
     private val firstLists = HashMap<Char, IntList>()
     // Separate frequency-independent index for long forms.
     private val longFirstLists = HashMap<Char, IntList>()
+    // Long-word candidates are also indexed by their final letter. A swipe has a known
+    // start and end, so scanning every long word with only a matching first letter wastes
+    // most of the 50 ms gesture budget.
+    private val longFirstLastLists = HashMap<Char, HashMap<Char, IntList>>()
     var maxLog = 1f
     // 1.4.0: own alphabet per lexicon (1 byte per letter for any script: Polish, German, Ukrainian, Greek ...)
     private val b2c = CharArray(256)
@@ -43,6 +47,7 @@ class Lexicon(val lang: String) {
     val logf: FloatArray get() = lf
     val byFirst: Map<Char, IntList> get() = firstLists
     val byLongFirst: Map<Char, IntList> get() = longFirstLists
+    val byLongFirstLast: Map<Char, Map<Char, IntList>> get() = longFirstLastLists
 
     private fun code(c: Char): Int = if (c.code < fast.size) fast[c.code] else slow[c] ?: 0
     private fun codeOrAdd(c: Char): Int {
@@ -111,14 +116,21 @@ class Lexicon(val lang: String) {
         size++
         if (size * 2 > table.size) grow() else put(i, word)
         firstLists.getOrPut(word[0]) { IntList() }.add(i)
-        if (word.length >= LONG_WORD_MIN_LENGTH)
+        if (word.length >= LONG_WORD_MIN_LENGTH) {
             longFirstLists.getOrPut(word[0]) { IntList() }.add(i)
+            val lastLetter = word.lastOrNull { it.isLetter() } ?: word.last()
+            longFirstLastLists.getOrPut(word[0]) { HashMap() }
+                .getOrPut(lastLetter) { IntList() }.add(i)
+        }
     }
 
     /** release slack after bulk loading */
     fun trim() { buf = buf.copyOf(bufLen); off = off.copyOf(size + 1); lf = lf.copyOf(size + 1)
         firstLists.values.forEach { it.a = it.a.copyOf(it.n) }
         longFirstLists.values.forEach { it.a = it.a.copyOf(it.n) }
+        longFirstLastLists.values.forEach { byLast ->
+            byLast.values.forEach { it.a = it.a.copyOf(it.n) }
+        }
     }
 
     companion object {
@@ -309,7 +321,10 @@ class GlideDecoder(val keys: List<GKey>) {
     @Volatile var lastAborted = false; private set
     @Volatile var lastScanned = 0; private set
 
-    private class Elig(val a: IntArray, val n: Int, val startExtra: Double)
+    private class Elig(
+        val a: IntArray, val n: Int,
+        val startExtra: Double, val endExtra: Double, val proximity: Float
+    )
 
     /** per-gesture (per path variant) data shared by the scan passes */
     private class Ctx(
@@ -365,19 +380,42 @@ class GlideDecoder(val keys: List<GKey>) {
         val nn = if (tight) g.nnTight else g.nnLoose
         val L = g.len; val w1 = L + 1
         val sampleStep = if (L > 1) g.pathLen / (L - 1) else g.pathLen
-        val firstLists = if (longWordsOnly) lex.byLongFirst else lex.byFirst
         val near = g.near; val dwell = g.dwell; val endDist = g.endDist
         val seq = seqBuf
         val top = st.top; val topK = st.topK
         val learning = st.learning
         val elig = ArrayList<Elig>()
-        for ((c, fl) in firstLists) {
-            val k0 = idx(c, cross)
-            if (k0 < 0) continue
-            val startD = g.startDist[k0]
-            if (startD > gateMax) continue
-            elig.add(Elig(fl.a, fl.n, if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0))
+        if (longWordsOnly) {
+            // A long word is eligible only when both its first and final letters are near
+            // the corresponding ends of the gesture. This avoids scoring hundreds of
+            // thousands of impossible long forms on every swipe.
+            for ((first, byLast) in lex.byLongFirstLast) {
+                val firstKey = idx(first, cross)
+                if (firstKey < 0) continue
+                val startD = g.startDist[firstKey]
+                if (startD > gateMax) continue
+                val startExtra = if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0
+                for ((last, fl) in byLast) {
+                    val lastKey = idx(last, cross)
+                    if (lastKey < 0) continue
+                    val endD = endDist[lastKey]
+                    if (endD > gateMax) continue
+                    val endExtra = if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
+                    elig.add(Elig(fl.a, fl.n, startExtra, endExtra, startD + endD))
+                }
+            }
+        } else {
+            for ((first, fl) in lex.byFirst) {
+                val firstKey = idx(first, cross)
+                if (firstKey < 0) continue
+                val startD = g.startDist[firstKey]
+                if (startD > gateMax) continue
+                val startExtra = if (startD > p.radius) p.startSoftW * (startD - p.radius) else 0.0
+                elig.add(Elig(fl.a, fl.n, startExtra, 0.0, startD))
+            }
         }
+        // Visit the most geometrically plausible start/end pairs first under a time budget.
+        elig.sortBy { it.proximity }
         val pos = IntArray(elig.size)
         // lists are in frequency-rank order, so a rank window [from, to) is a contiguous part of each list
         for (ei in elig.indices) {
@@ -395,8 +433,21 @@ class GlideDecoder(val keys: List<GKey>) {
                 val end = min(el.n, fi + CHUNK)
                 val arr = el.a
                 while (fi < end) {
-                    val i = arr[fi++]
-                    if (i >= to) { fi = el.n; break }
+                    val logicalIndex = fi++
+                    // Long-word lists are frequency-ranked like the main dictionary. Alternate
+                    // from both ends so a rare form is not always starved behind common forms
+                    // when the gesture's time budget expires.
+                    val listIndex = if (longWordsOnly) {
+                        if ((logicalIndex and 1) == 0) logicalIndex ushr 1
+                        else el.n - 1 - (logicalIndex ushr 1)
+                    } else logicalIndex
+                    if (listIndex !in 0 until el.n) { fi = el.n; break }
+                    val i = arr[listIndex]
+                    if (i >= to) {
+                        if (longWordsOnly) continue
+                        fi = el.n
+                        break
+                    }
                     if (i >= lsize) continue
                     st.scanned++
                     val o = offs[i]
@@ -413,7 +464,15 @@ class GlideDecoder(val keys: List<GKey>) {
                         val ki = keyOf[buf[o + k].toInt() and 0xFF]
                         if (ki == -2) continue
                         if (ki < 0 || m >= seq.size) { ok = false; break }
-                        if (m > 0 && seq[m - 1] == ki) { if (dwell[ki] > 0.55f) doubles++; continue }
+                        if (m > 0 && seq[m - 1] == ki) {
+                            // A repeated letter is a second key visit only when the trace
+                            // genuinely dwells/hooks around that key; otherwise collapse it.
+                            if (dwell[ki] > 0.55f) {
+                                doubles++
+                                if (m < seq.size) seq[m++] = ki
+                            }
+                            continue
+                        }
                         val d = near[ki]
                         if (d > nearLim) { ok = false; break }
                         // Don't let one sampled point satisfy two different nearby keys.
@@ -437,7 +496,8 @@ class GlideDecoder(val keys: List<GKey>) {
                     val kl = seq[m - 1]
                     val endD = endDist[kl]
                     if (endD > gateMax) continue
-                    val endExtra = if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
+                    val endExtra = if (longWordsOnly) el.endExtra
+                        else if (endD > p.radius) p.endSoftW * (endD - p.radius) else 0.0
                     val freq = (logf[i] / maxLog).toDouble().coerceIn(0.0, 1.0)
                     // 1.5.9: long rare words must not win over common ones: penalty grows with rarity and length
                     val rare = 1.0 - freq

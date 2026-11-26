@@ -135,6 +135,37 @@ class GlideDecoderTest {
         }
     }
 
+    @Test fun longRareWordsSurviveARealisticNoisySwipe() {
+        val priority = Lexicon.parse("ru_priority", findAsset("ru_priority.tsv").readLines().asSequence())
+        val targets = listOf(
+            "перспективно", "достопримечательность", "непредсказуемость",
+            "производительностью", "электротехнический", "распознавание"
+        )
+        for (word in targets) {
+            assertTrue("priority lexicon missing $word", priority.contains(word))
+            val (x, y) = GlideBenchTest.gesture(
+                GlideBenchTest.ru11, word, kotlin.random.Random(word.hashCode()), sigma = 0.18f
+            )
+            val decoded = GlideDecoder(GlideBenchTest.ru11)
+                .decode(x, y, x.size, listOf(priority to 0.0))
+                .map { it.word.replace('ё', 'е') }
+            assertTrue("expected '$word' in top 3, got ${decoded.take(5)}",
+                decoded.take(3).contains(word.replace('ё', 'е')))
+        }
+    }
+
+    @Test fun aMovingTraceCanDistinguishVeryCloseAdjacentKeys() {
+        val closeKeys = listOf(
+            GKey('a', 100f, 100f, 100f, 150f),
+            GKey('b', 115f, 100f, 100f, 150f)
+        )
+        val lex = Lexicon("test").apply { add("ab", 100_000L) }
+        val xs = IntArray(64) { 100 + it * 15 / 63 }
+        val ys = IntArray(64) { 100 }
+        val result = GlideDecoder(closeKeys).decode(xs, ys, xs.size, listOf(lex to 0.0)).map { it.word }
+        assertTop("ab", result)
+    }
+
     @Test fun ruWordsWithYo() {
         assertTop("ещё".replace('ё', 'е').let { if (ru.contains("ещё")) "ещё" else it },
             decode(jcuken, wordPoints(jcuken, "еще"), listOf(ru to 0.0)), 3)

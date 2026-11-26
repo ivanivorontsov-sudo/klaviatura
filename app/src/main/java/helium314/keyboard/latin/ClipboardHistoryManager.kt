@@ -363,8 +363,8 @@ class ClipboardHistoryManager(
                     entry.timeStamp > legacyDismissedTimestamp &&
                     now - entry.timeStamp in -60_000L..RECENT_IMAGE_MILLIS
             }
-            // Newest capture first; database IDs break same-millisecond timestamp ties.
-            ?.maxWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
+            // FIFO: offer the oldest pending capture first; IDs order same-millisecond imports.
+            ?.minWithOrNull(compareBy<ClipboardHistoryEntry> { it.timeStamp }.thenBy { it.id })
     }
 
     private fun recentImageSuggestionView(
@@ -640,8 +640,10 @@ class ClipboardHistoryManager(
             else latinIME.onEvent(Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_PASTE, 0,
                 Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false))
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
-            binding.root.isGone = true
-            mainHandler.post { if (!destroyed) latinIME.refreshScreenshotSuggestion() }
+            // Remove the external text card through the normal suggestion-strip path.
+            // Hiding only its view leaves isExternalSuggestionVisible=true and keeps the
+            // screenshot queue hidden even though the text has already been pasted.
+            removeClipboardSuggestion()
         }
         textView.setOnClickListener(onClickListener)
 
@@ -683,6 +685,9 @@ class ClipboardHistoryManager(
             latinIME.mHandler.postResumeSuggestions(false)
         }
         csv.isGone = true
+        // The text card has released the external suggestion strip; restore the screenshot
+        // queue in its own slot while keeping the three live word suggestions untouched.
+        mainHandler.post { if (!destroyed) latinIME.refreshScreenshotSuggestion() }
     }
 
     companion object {
