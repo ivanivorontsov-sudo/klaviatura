@@ -425,14 +425,20 @@ class GlideDecoder(val keys: List<GKey>) {
             pos[ei] = lo
         }
         var active = elig.size
-        while (active > 0 && !st.stop) {
+        // The long-word pass is a recall extension, not a second full dictionary traversal.
+        // Bound total candidates per gesture and use smaller chunks so endpoint pairs share
+        // the budget instead of the first large list consuming it all.
+        val scanBudget = if (longWordsOnly) MAX_LONG_WORD_SCAN else Int.MAX_VALUE
+        var scannedInPass = 0
+        val chunkSize = if (longWordsOnly) LONG_WORD_CHUNK else CHUNK
+        while (active > 0 && !st.stop && scannedInPass < scanBudget) {
             active = 0
             for (ei in elig.indices) {
                 val el = elig[ei]; var fi = pos[ei]
                 if (fi >= el.n) continue
-                val end = min(el.n, fi + CHUNK)
+                val end = min(el.n, fi + chunkSize)
                 val arr = el.a
-                while (fi < end) {
+                while (fi < end && scannedInPass < scanBudget) {
                     val logicalIndex = fi++
                     // Long-word lists are frequency-ranked like the main dictionary. Alternate
                     // from both ends so a rare form is not always starved behind common forms
@@ -449,6 +455,7 @@ class GlideDecoder(val keys: List<GKey>) {
                         break
                     }
                     if (i >= lsize) continue
+                    scannedInPass++
                     st.scanned++
                     val o = offs[i]
                     val e = if (i + 1 < lsize) offs[i + 1] else bufEnd
@@ -527,6 +534,7 @@ class GlideDecoder(val keys: List<GKey>) {
                 }
                 pos[ei] = fi
                 if (fi < el.n) active++
+                if (scannedInPass >= scanBudget) break
                 if (System.nanoTime() > st.deadline) { st.truncated = true; st.stop = true; break }
                 if (st.abort != null && st.abort.invoke()) { st.aborted = true; st.stop = true; break }
             }
@@ -760,6 +768,10 @@ class GlideDecoder(val keys: List<GKey>) {
         const val N = 40
         /** words scanned per first-letter list before the time budget is checked */
         const val CHUNK = 1024
+        /** long-word candidates per gesture, shared across eligible start/end letter pairs */
+        private const val MAX_LONG_WORD_SCAN = 8_192
+        /** small long-word batches keep the scan budget distributed across endpoint pairs */
+        private const val LONG_WORD_CHUNK = 32
         /** upper bound of learned boosts (word / bigram / LM) used for exact pruning */
         const val BOOST_SLACK = 4.0
         @JvmField var P = Params()
