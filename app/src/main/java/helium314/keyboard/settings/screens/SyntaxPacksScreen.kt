@@ -3,6 +3,8 @@ package helium314.keyboard.settings.screens
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.weight
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.utils.BackButton
+import ru.klaviatura.code.CodeLayoutSwitch
 import ru.klaviatura.code.SyntaxPackManager
 import ru.klaviatura.glide.GlideEngine
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +41,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
     var activeSyntax by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Загружаю каталог…") }
+    var codeLayoutsEnabled by remember { mutableStateOf(CodeLayoutSwitch.isEnabled(context)) }
 
     fun refreshCatalog() {
         scope.launch {
@@ -57,6 +62,7 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         SyntaxPackManager.init(context)
+        codeLayoutsEnabled = CodeLayoutSwitch.isEnabled(context)
         refreshCatalog()
     }
 
@@ -72,6 +78,34 @@ fun SyntaxPacksScreen(onClickBack: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(vertical = 12.dp)
         )
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Программные раскладки", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Русская и латинская раскладки для ввода кода. Включаются только здесь; кнопка </> находится в дополнительной панели клавиатуры.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 3.dp, end = 12.dp)
+                )
+            }
+            Switch(
+                checked = codeLayoutsEnabled,
+                enabled = busy.isEmpty(),
+                onCheckedChange = { enabled ->
+                    val previous = codeLayoutsEnabled
+                    try {
+                        CodeLayoutSwitch.setEnabled(context, enabled)
+                        codeLayoutsEnabled = CodeLayoutSwitch.isEnabled(context)
+                        status = if (enabled) "Программные раскладки включены" else "Программные раскладки выключены"
+                    } catch (e: Exception) {
+                        codeLayoutsEnabled = previous
+                        status = "Не удалось изменить раскладки: ${e.message ?: "ошибка"}"
+                    }
+                }
+            )
+        }
         Button(onClick = { refreshCatalog() }, enabled = busy.isEmpty()) {
             Text(if (busy == "catalog") "Обновляю…" else "Обновить каталог")
         }
