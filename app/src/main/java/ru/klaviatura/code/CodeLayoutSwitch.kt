@@ -90,8 +90,26 @@ object CodeLayoutSwitch {
         return s
     }
 
-    /** the «</>» toolbar key: into the code layout and back to the previous layout */
+    /** Called only from the explicit Settings switch. */
+    fun setEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.prefs()
+        if (enabled) {
+            enableLayouts(prefs)
+        } else {
+            SubtypeSettings.getEnabledSubtypes(true)
+                .filter { CodeMode.isCodeLayout(it.mainLayoutName()) }
+                .forEach { SubtypeSettings.removeEnabledSubtype(context, it) }
+        }
+        prefs.edit().putBoolean(PREF_CODE_LAYOUTS_ENABLED, enabled).apply()
+    }
+
+    /** the «</>» action in the expandable toolbar: into the code layout and back. */
     fun toggle(ime: LatinIME) {
+        val prefs = ime.prefs()
+        if (!prefs.getBoolean(PREF_CODE_LAYOUTS_ENABLED, false)) {
+            Toast.makeText(ime, "Сначала включите программные раскладки в настройках", Toast.LENGTH_LONG).show()
+            return
+        }
         val rim = RichInputMethodManager.getInstance()
         val cur = rim.currentSubtype
         val cyr = rim.currentSubtypeLocale.script() == ScriptUtils.SCRIPT_CYRILLIC
