@@ -1,0 +1,72 @@
+name: Publish tested candidate 1.5.22
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-tested-candidate-once.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.event.head_commit.message == 'Publish tested candidate 1.5.22'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the already-tested signed candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          gh run download 45805481465 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name Klaviatura-release-candidate \
+            --dir "$RUNNER_TEMP/candidate"
+          APK="$(find "$RUNNER_TEMP/candidate" -maxdepth 2 -type f -name 'Klaviatura_1.5.22-release.apk' -print -quit)"
+          test -n "$APK"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+          sha256sum "$APK"
+
+      - name: Create the official GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## Клавиатура 1.5.22
+
+          - Исправлен выбор русского языка свайпа при первом запуске; русская раскладка не подмешивает полный английский словарь.
+          - Добавлены приоритетный словарь редких и длинных русских слов и 97 разговорных форм; ускорен ограниченный поиск длинных слов.
+          - Улучшено распознавание свайпа между соседними клавишами: учитывается реальное продвижение пальца.
+          - Локальные n-граммные подсказки учитывают язык предыдущего слова.
+          - Голосовой ввод защищён от очистки поля пустыми промежуточными результатами распознавания.
+          - Очередь скриншотов работает по FIFO; крестик скрывает очередь, не удаляя историю, а OCR-пропуск убирает только текущий снимок.
+          - Текстовый буфер имеет приоритет над скриншотами; закрытие карточки текста возвращает очередь.
+          - Карточка скриншота не занимает место трёх словесных подсказок.
+          - Добавлены четыре оригинальные офлайн GIF-наклейки с лицензией CC0.
+          - В настройках «О приложении» раздельно указаны исходный проект HeliBoard и автор кастомной версии Иван Воронцов.
+          - Карточка скопированного текста вынесена в отдельную область и не исчезает при обновлении словарных подсказок.
+          - Исправлена стартовая прокрутка «Голосовых инструментов».
+          - Исправлены малоконтрастные подписи аудиозаписей и тесная раскладка кнопок: действия показаны в две строки.
+          - Усилена обработка новых скриншотов: повторный импорт после уведомлений MediaStore, без лимита в 100 последних изображений и с безопасным временем файла.
+          - Исправлено возвращение в клавиатуру после снимка рабочего стола: импорт на старте окна теперь переоткрывает скрытую очередь, а повторные сканирования ловят снимки, которые MediaStore публикует с задержкой.
+
+          ### Основа и авторство
+          - Исходный проект: https://github.com/HeliBorg/HeliBoard
+          - Репозиторий кастомной версии: https://github.com/ivanivorontsov-sudo/klaviatura
+
+          ### Предиктор
+          Встроенные предсказания используют локальную статистическую n-граммную модель. MNN-Pocket-0.3B-RU в эту версию не интегрирован.
+
+          ### Сборка
+          Версия 1.5.22 (versionCode 44). APK подписан release-ключом; unit-тесты и проверка JNI после R8 пройдены.
+          EOF
+          gh release create v1.5.22 "$APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Клавиатура v1.5.22" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --target b3aaae005eee649d7e88b1409eee7b2a3b02b39d \
+            --latest
